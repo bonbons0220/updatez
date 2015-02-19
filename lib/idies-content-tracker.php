@@ -69,7 +69,7 @@ class idies_content_tracker {
 		
 		}
 		
-		return $content  . '</div>' . $append;
+		return $content  . $append;
 	}
 
 }
