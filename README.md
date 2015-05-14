@@ -1,10 +1,16 @@
-dr12-post-types
+idies-content-tracker
 ===============
 
-This basic WordPress plugin creates a custom post type for SDSS' Data Release 12 documentation, and a custom taxonomy for each SDSS Classification (Optical Spectra, Imaging, IR Spec, et al) . 
+This plugin displays tracking information on the frontend of a wordpress site.
 
-This allows the user to create separate posts for each SDSS Classification for better maintenance, and keeping the content separate from static pages that have non-DR12 related content.
 
-Although each posts has its own unique URL, all the classifications get rendered on the root slug ("../spectro") as one concatenated page using WordPress' conditional tag for taxonomy. 
+The tracking data will only be displayed if the constant WP_ENV is set to 'development'. Set this in the wp-config.php file.
 
-N.B.: Sidebar navigation must be added via the Widgets interface! Please see an existing widget for the correct markup, and double check that each post has appropriate and corresponding heading and section "id=" elements.
+The plugin depends on installation and activation of the WordPress-Creative-Kit Plugin and needs the Pro version (which allows for the field type userid).
+
+The plugin looks for meta data associated with a post, called 'Tracking' (slug: tracking), with the fields
+Editor, Reviewer, Status and Comments. Status must have one of the following values: 
+Needs Update,Update in Progress,Needs Review,Update Completed,Do not Publish.
+Editor and Reviewer are wordpress users. Other fields can be added and will be listed in the tracking info on each page.
+
+The most recent panel is displayed in context sensitive colors depending on the value of Status.

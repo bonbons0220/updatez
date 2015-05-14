@@ -41,7 +41,17 @@ class idies_content_tracker {
 	
 	function show( $content ) {
 	
+		//if (empty(WP_DEBUG)) return;
 		$append = '';
+		
+		// Set up Panel Classes
+		$panel_class = array(
+				'Needs Update' => 'panel-danger',
+				'Update in Progress' => 'panel-warning',
+				'Needs Review' => 'panel-info',
+				'Update Completed' => 'panel-success',
+				'Do not Publish' => 'panel-default',
+			);
 		
 		// This is only shown on dev devng test and testng.
 		if ( 'development' !== WP_ENV) return $content;
@@ -55,15 +65,24 @@ class idies_content_tracker {
 			
 			foreach( get_cfc_meta( 'tracking' ) as $key => $value ){
 				//get all the fields for this entry
-				$update = '';
+				$description = '';
+				$title = '' ;
 				$fields = array_keys($tracking[$key]);
-				$class='default';
 				foreach ($fields as $thisfield) {
 					$thisresult = the_cfc_field( 'tracking',$thisfield, false, $key , false);
-					$update .= ucfirst($thisfield) . ": " . $thisresult . "<br>";
-					if (count($tracking)-1 == $key) $class = ('status' === $thisfield) ? strtolower(str_replace(" ","-",$thisresult)) : $class ;
+					$description .= ucfirst($thisfield) . ": " . $thisresult . "<br>";
+					if ('status' === $thisfield) {
+						$title = ucfirst($thisfield) . ": " . $thisresult;
+						if (count($tracking)-1 == $key) {
+							$class = ( empty( $panel_class[$thisresult] ) ) ? 'panel-default' : $panel_class[$thisresult] ;
+						} else {
+							$class = 'panel-default' ;
+						}
+					}
 				}
-				$update = '<div class="panel panel-' . $class . '"><div class="panel-body">' . $update . '</div></div>';
+				$update = '<div class="panel ' . $class . '">';
+				$update .= '<div class="panel-heading"><h3 class="panel-title">' . $title . '</h3></div>';
+				$update .= '<div class="panel-body">' . $description . '</div></div>';
 				$append = $update .  $append;
 			}
 		
