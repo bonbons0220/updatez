@@ -41,15 +41,14 @@ class idies_content_tracker {
 	
 	function show( $content ) {
 	
-		//if (empty(WP_DEBUG)) return;
 		$append = '';
 		
 		// Set up Panel Classes
 		$panel_class = array(
-				'Needs Update' => 'panel-danger',
-				'Update in Progress' => 'panel-warning',
+				'Started' => 'panel-danger',
+				'Migrated' => 'panel-warning',
 				'Needs Review' => 'panel-info',
-				'Update Completed' => 'panel-success',
+				'Completed' => 'panel-success',
 				'Do not Publish' => 'panel-default',
 			);
 		
