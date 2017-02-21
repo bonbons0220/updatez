@@ -3,7 +3,7 @@
 Plugin Name: IDIES Content Tracker
 Plugin URI: http://idies.jhu.edu
 Description: Tracks content updates. Requires WCK Pro Version to work.
-Version: 1.0
+Version: 1.1
 Author: Bonnie Souter
 Author URI: http://idies.jhu.edu
 License: GPLv2
@@ -29,7 +29,7 @@ Copyright 2015 Bonnie Souter  (email : bsouter@jhu.edu)
 defined('ABSPATH') or die("Unknown Access Error");
 
 if ( defined( 'ICT_PASSWORD_VERSION' ) ) die('IDIES Content Tracker vesion ' . ICT_PASSWORD_VERSION . ' already running.');
-define('ICT_PASSWORD_VERSION', '1.0');
+define('ICT_PASSWORD_VERSION', '1.1');
 
 define('ICT_DIR_PATH',plugin_dir_path( __FILE__ ));
 define('ICT_DIR_URL',plugins_url());
