@@ -7,6 +7,13 @@
 */
 
 class idies_content_tracker {
+
+	public $statuses;
+	public $panel_class;
+	public $all_pages;
+	public $default_reviewer = 'bsouter';
+	public $default_status = 'not-started';
+	
 	
 	public function __construct() {
 		
@@ -17,11 +24,29 @@ class idies_content_tracker {
 		}
 			
 		// Add content filter
-		add_filter( 'the_content', array($this , 'show' ) );
+		add_filter( 'the_content', array($this , 'showstatus' ) );
 
 		/** Create Top Level Admin Menu item */
 		add_action( 'admin_menu', array( $this , 'create_admin_menu' ) );
 		
+		$this->default_reviewer = 'bsouter';
+		$this->default_status = 'not-started';
+		
+		$this->statuses = array(
+			"not-started"=>"Not Started",
+			"in-progress"=>"In Progress",
+			"needs-review"=>"Needs Review",
+			"completed"=>"Completed",
+			"do-not-publish"=>"Do Not Publish",
+		);
+		
+		$this->panel_class = array(
+			'not-started' => 'panel-danger',
+			'in-progress' => 'panel-warning',
+			'needs-review' => 'panel-info',
+			'completed' => 'panel-success',
+			'do-not-publish' => 'panel-default',
+		);
 	}
 
 	//Create the Plugin Top level Dashboard Menu Item
@@ -44,31 +69,133 @@ class idies_content_tracker {
 		if ( !current_user_can( 'edit_pages' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
-		
-		
-		echo '<div class="wrap">';
-		echo '<h1>Status Updates Settings</h1>';		
-		echo '<div><h2>Page Update Status Summary</h2>';
-		
-		$all_pages = $this->get_page_updates();
-		echo '<p>There are ' . count( $all_pages ) . ' Pages</p></div>';
-		
-		$meta_args = array( 
+
+		// THE DATA
+		// PAGES
+		$this->all_pages = $this->get_page_updates();
+		$update_args = array( 
 			'meta_key' => 'idies_status_update',
 			'meta_compare' => 'NOT EXISTS', 
 			'meta_value' => '' ,
 		);
-		$updated_pages = $this->get_page_updates( $meta_args );
-		echo '<p>There are ' . count( $updated_pages ) . ' Pages with the Status Update Set</p></div>';
+		$updated_pages = $this->get_page_updates( $update_args );
+		$completed_args = array( 
+			'meta_key' => 'idies_status_update',
+			'meta_value' => 'completed' ,
+		);
+		$completed_pages = $this->get_page_updates( $completed_args );
 		
-		echo '<p>Initialize Update Status for all Pages: </p></div>';
+		// USERS
+		$all_users = get_users( 'orderby=nicename' );
 		
-		echo '<div><h2>Export CSV</h2></div>';
+		// Deal with the Action
+		$the_action = ( isset( $_POST['export'] ) ? 'export' :
+			( isset( $_POST['import'] ) ? 'import' :
+				( isset( $_POST['nuclear'] ) ? 
+					'nuclear' :
+					( isset( $_POST['action'] ) ? 
+						'update' :
+						'showsettings') ) ) );
+						
+		if ( $the_action ) {
+			switch ($the_action) {
+				case 'import' :
+					$this->import();
+				break;
+				case 'export' :
+					$this->export();
+				break;
+				case 'nuclear' :
+					if ( !current_user_can( 'edit_theme_options' ) ) {
+						echo 'You do not have sufficient permissions to use the nuclear option.';
+					} else {
+						$this->nuclear(  );
+					}
+				break;
+				case 'update' :
+					$this->default_reviewer = isset( $_POST[ 'default-reviewer' ] ) ? $_POST[ 'default-reviewer' ] : get_option( 'idies_default_reviewer' , $this->default_reviewer );
+					update_option( 'idies_default_reviewer' , $this->default_reviewer );
+					$this->default_status = isset( $_POST[ 'default-status' ] ) ? $_POST[ 'default-status' ] : get_option( 'idies_default_status' , $this->default_status );
+					update_option( 'idies_default_status' , $this->default_status );
+				break;
+				case 'showsettings' :
+					$this->default_reviewer = get_option( 'idies_default_reviewer' , $this->default_reviewer );
+					$this->default_status = get_option( 'idies_default_status' , $this->default_status );
+				break;
+			}
+		}
+
+		// Show the form
+		echo '<div class="wrap">';
+		echo '<h1>Status Updates Settings</h1>';
 		
-		echo '<div><h2>Import CSV</h2></div>';
+		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings">';
+		echo '<input type="hidden" name="options" value="settings">';
+		echo '<input type="hidden" name="action" value="update">';
+		wp_nonce_field( 'update_ict_settings' );
 		
-		echo '<div><h2>Notify Editors</h2></div>';
+		echo '<table class="form-table">';
+		echo '<tbody>';
+
+		echo '<tr>';
+		echo '<th scope="row">Default Reviewer</th>';
+		echo '<td>';
+		echo '<select name="default-reviewer" id="default-reviewer">';
+		foreach ( $all_users as $thisuser ) {
+			$selected = ( strcmp( $this->default_reviewer , $thisuser->user_nicename )===0 ) ? " selected " : "" ;
+			echo '<option value="' . $thisuser->user_nicename . '"' . $selected . '>' . $thisuser->display_name . '</option>';
+		}
+		echo '</select>';
+		echo '</td>';
+		echo '</tr>';
+
 		
+		echo '<tr>';
+		echo '<th scope="row">Default Status</th>';
+		echo '<td>';
+		echo '<select name="default-status" id="default-status">';
+		foreach ( $this->statuses as $thiskey => $thisvalue ) {
+			$selected = ( strcmp( $this->default_status , $thiskey )===0 ) ? " selected " : "" ;
+			echo '<option value="' . $thiskey . '"' . $selected . '>' . $thisvalue. '</option>';
+		}
+		echo '</select>';
+		echo '</td>';
+		echo '</tr>';
+		
+		echo '<tr>';
+		echo '<th scope="row">All Pages<br><em>Includes published, private, and draft</em></th>';
+		echo '<td>' . count( $this->all_pages ) . '</td>';
+		echo '</tr>';
+		
+		echo '<tr>';
+		echo '<th scope="row">Status Complete</th>';
+		echo '<td>' . count( $completed_pages ) . '</td>';
+		echo '</tr>';
+		
+		echo '<tr>';
+		echo '<th scope="row">Status Not Set</th>';
+		echo '<td>' . count( $updated_pages ) . '</td>';
+		echo '</tr>';
+		
+		echo '<tr>';
+		echo '<th scope="row">Export Page Updates as CSV...</th>';
+		echo '<td><button class="button button-secondary" id="export" name="export" value="export">Export</button></td>';
+		echo '</tr>';
+
+		echo '<tr>';
+		echo '<th scope="row">Import Page Updates CSV...</th>';
+		echo '<td><button class="button button-secondary" id="import" name="import" value="export">Import</button></td>';
+		echo '</tr>';
+				
+		echo '<tr>';
+		echo '<th scope="row">Nuclear Option: <br>Set All to Default Status & Reviewer</th>';
+		echo '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Go Nuclear</button></td>';
+		echo '</tr>';
+
+		echo '</tbody>';
+		echo '</table>';
+		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
+		echo '</form>';
 		echo '</div>';
 
 		return;
@@ -79,7 +206,7 @@ class idies_content_tracker {
 		
 		// Get or Set query variables
 		$post_type  = 'page' ; 															// pages only, no other post types
-		$post_status  = 'publish,draft' ; 												// published and drafts only, no revisions
+		$post_status  = 'publish,private,draft' ;										// published and drafts only, no revisions
 		
 		$paged = isset( $_GET[ 'paged' ] ) ? 											// page 1
 					absint( $_GET[ 'paged' ] ) : 
@@ -154,15 +281,13 @@ class idies_content_tracker {
 		<input type="submit" id="doaction" class="button action" value="Apply">
 	</div>
 	<div class="alignleft actions">
-		<label for="filter-by-date" class="screen-reader-text">Filter by Status</label>
-		<select name="m" id="filter-by-date">
-			<option selected="selected" value="any-status">Any Status</option>
-			<option value="not-started">Not Started</option>
-			<option value="in-progress">In Progress</option>
-			<option value="needs-review">Needs Review</option>
-			<option value="completed">Completed</option>
-			<option value="do-not-publish">Do Not Publish</option>
-			<option value="no-status">No Status</option>
+		<label for="filter-by-status" class="screen-reader-text">Filter by Status</label>
+		<select name="filter-status" id="filter-status">
+		<option selected="selected" value="any-status">Any Status</option>
+<?php
+		foreach ( $this->statuses as $thiskey => $thisvalue ) echo '<option value="' . $thiskey . '">' . $thisvalue. '</option>';
+?>
+		<option value="do-not-publish">Do not Publish</option>
 		</select>
 	</div>
 	<h2 class="screen-reader-text">Status Update list navigation</h2>
@@ -228,8 +353,8 @@ class idies_content_tracker {
 		<input type="submit" id="doaction" class="button action" value="Apply">
 	</div>
 	<div class="alignleft actions">
-		<label for="filter-by-date" class="screen-reader-text">Filter by Status</label>
-		<select name="m" id="filter-by-date">
+		<label for="filter-by-status" class="screen-reader-text">Filter by Status</label>
+		<select name="m" id="filter-by-status">
 			<option selected="selected" value="any-status">Any Status</option>
 			<option value="not-started">Not Started</option>
 			<option value="in-progress">In Progress</option>
@@ -257,6 +382,25 @@ class idies_content_tracker {
 		echo '</div>';
 	}		
 
+	function import() {
+	
+	}		
+
+	function export() {
+	
+	}		
+
+	// Set all pages meta data to default_reviewer and default_status
+	function nuclear() {
+		
+		foreach ( $this->all_pages as $thispage ){
+			update_post_meta( $thispage->ID , 'idies_update_status' , $this->default_status ) ;
+			update_post_meta( $thispage->ID , 'idies_update_reviewer' , $this->default_reviewer ) ;
+			update_post_meta( $thispage->ID , 'idies_update_comment' , '' ) ;
+		}
+	
+	}		
+
 	function activate() {
 	
 		//do activation stuff
@@ -275,55 +419,31 @@ class idies_content_tracker {
 	
 	}
 	
-	function show( $content ) {
+	// Show the status on a page, under the content.
+	function showstatus( $content ) {
 	
 		$append = '';
 		
-		// Set up Panel Classes
-		$panel_class = array(
-				'Not Started' => 'panel-danger',
-				'In Progress' => 'panel-warning',
-				'Needs Review' => 'panel-info',
-				'Completed' => 'panel-success',
-				'Do not Publish' => 'panel-default',
-			);
-		
-		// This is only shown on dev devng test and testng.
+		// Status is only shown on dev devng test and testng.
 		if ( 'development' !== WP_ENV) return $content;
+		
+		// No status - no show
+		$status = get_post_meta( get_the_ID() , 'idies_update_status', true );
+		if ( empty( $status ) ) return $content;		
+		$reviewer = get_post_meta( get_the_ID() , 'idies_update_reviewer', true );
+		$comments = get_post_meta( get_the_ID() , 'idies_update_comments', true );
+		
+		//if ( array_key_exists ( $status , $this->panel_class ) ) $class = $this->panel_class->$status;
+		$class='panel-danger';
 
-		if ( function_exists( 'get_cfc_meta' ) ) {
-			
-			// These are the Tracking entries for this page.
-			// Display them in reverse chronological order.
-			$tracking = get_cfc_meta( 'tracking' );
-			$final = count($tracking)-1;
-			
-			foreach( get_cfc_meta( 'tracking' ) as $key => $value ){
-				//get all the fields for this entry
-				$description = '';
-				$title = '' ;
-				$fields = array_keys($tracking[$key]);
-				foreach ($fields as $thisfield) {
-					$thisresult = the_cfc_field( 'tracking',$thisfield, false, $key , false);
-					$description .= ucfirst($thisfield) . ": " . $thisresult . "<br>";
-					if ('status' === $thisfield) {
-						$title = ucfirst($thisfield) . ": " . $thisresult;
-						if (count($tracking)-1 == $key) {
-							$class = ( empty( $panel_class[$thisresult] ) ) ? 'panel-default' : $panel_class[$thisresult] ;
-						} else {
-							$class = 'panel-default' ;
-						}
-					}
-				}
-				$update = '<div class="panel ' . $class . '">';
-				$update .= '<div class="panel-heading"><h3 class="panel-title">' . $title . '</h3></div>';
-				$update .= '<div class="panel-body">' . $description . '</div></div>';
-				$append = $update .  $append;
-			}
+		$update = '<div class="panel ' . $this->panel_class[$status] . '">';
+		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
+		$update .= '<div class="panel-body">';
+		$update .= "Reviewer: " . $reviewer . "<br>\n";
+		$update .= "Comments: " . $comments;
+		$update .= '</div></div>';
 		
-		}
-		
-		return $content  . $append;
+		return $content  . $update;
 	}
 
 }
