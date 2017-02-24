@@ -84,8 +84,10 @@
 	 */	
 	public function __construct() {
 		
-		register_activation_hook( __FILE__, '$this->activate' );
-		register_deactivation_hook( __FILE__, '$this->deactivate' );
+		//register_activation_hook( __FILE__, '$this->activate' );
+		//register_deactivation_hook( __FILE__, '$this->deactivate' );
+		
+		// Don't show on Prod/WWW
 		if ( !defined( 'WP_ENV' )) {
 		    define( 'WP_ENV' , 'production' );
 		}
@@ -143,11 +145,9 @@
 			return $post_id;
 		}
 		
-		// Check if nonce is set
+		// Check nonce, user capabilities
 		check_admin_referer( 'update_save_meta', 'save_meta' );
-
-		if ( ! current_user_can( 'edit_post' ) && ! wp_is_post_autosave( $post_id ) ) 
-			return $post_id;
+		if ( ! current_user_can( 'edit_post' ) && ! wp_is_post_autosave( $post_id ) ) return $post_id;
 
 		if ( $newreviewer && get_user_by( 'slug', $newreviewer ) ) {
 		
@@ -273,6 +273,8 @@
 	 */	
 	function show_settings_page() {
 		
+		$result = array();
+		
 		if ( !current_user_can( 'edit_pages' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
@@ -303,11 +305,11 @@
 		if ( ( $the_action ) && ( ! empty( $_POST ) && check_admin_referer( 'update_idies_settings' , 'update_nonce' ) ) ) {
 		
 			switch ($the_action) {
+				case 'export' :
+					$this->export( $result );
+				break;
 				case 'import' :
 					$this->import();
-				break;
-				case 'export' :
-					$this->export();
 				break;
 				case 'nuclear' :
 					if ( !current_user_can( 'edit_theme_options' ) ) {
@@ -334,6 +336,10 @@
 		// Show the form
 		echo '<div class="wrap">';
 		echo '<h1>Status Updates Settings</h1>';
+		
+		foreach ($result as $thiskey=>$thisvalue) {
+			echo '<div class="updated notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+		}
 		
 		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings">';
 		echo '<input type="hidden" name="options" value="settings">';
@@ -388,7 +394,7 @@
 
 		echo '<tr>';
 		echo '<th scope="row">Import Page Updates CSV...</th>';
-		echo '<td><button class="button button-secondary" id="import" name="import" value="export">Import</button></td>';
+		echo '<td><button class="button button-secondary" id="import" name="import" value="import">Import</button></td>';
 		echo '</tr>';
 				
 		echo '<tr>';
@@ -629,8 +635,43 @@
 	 * @access public
 	 * @return void
 	 */	
-	function export() {
-	
+	function export( &$result ) {
+		$fname = new DateTime();
+		$fname = '/tmp/' . sha1( $fname->format('Y-m-d H:i:sP') ) . '.csv';
+		
+		$sep = ',';
+		$quo = '"';
+		
+		$output = 
+			$quo . "ID" . $quo . $sep . 
+			$quo . "Title" . $quo . $sep .
+			$quo . "Edit" . $quo . $sep .
+			$quo . "View" . $quo . $sep .
+			$quo . "Status" . $quo . $sep .
+			$quo . "Reviewer" . $quo . $sep .
+			$quo . "Comment" . $quo . $sep .
+			$quo . "Last Revised" . $quo . "\n";
+		foreach ( $this->all_pages as $thispage ){
+			//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
+			$output .= 
+				$thispage->ID . $sep . 
+				$quo . $thispage->post_title . $quo . $sep . 
+				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
+				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep . 
+				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
+				$quo . $thispage->post_modified . $quo . PHP_EOL;
+		}
+		$myfile = fopen($fname, "w") or die("Unable to create ". $fname ." file.");
+		fwrite($myfile, $output);
+		fclose($myfile);
+		
+		//header('Content-Type: text/plain'); // you can change this based on the file type
+		//header('Content-Disposition: attachment; filename="readme.txt"');
+		
+		$result['success']="$fname";
+		return $result;
 	}	
 
 	/**
@@ -649,39 +690,6 @@
 		}
 	
 	}		
-
-	/**
-	/* do activation stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function activate() {
-		//do activation stuff
-	}
-	
-	/**
-	/* do de-activation stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function deactivate() {
-		// clean up on deactivation
-	}
-	
-	/**
-	/* do setup stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function setup() {
-		// clean up on deactivation
-	}
 	
 	/**
 	/* Show the status on a page, under the content.
