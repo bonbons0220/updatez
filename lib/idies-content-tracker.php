@@ -84,8 +84,10 @@
 	 */	
 	public function __construct() {
 		
-		register_activation_hook( __FILE__, '$this->activate' );
-		register_deactivation_hook( __FILE__, '$this->deactivate' );
+		//register_activation_hook( __FILE__, '$this->activate' );
+		//register_deactivation_hook( __FILE__, '$this->deactivate' );
+		
+		// Don't show on Prod/WWW
 		if ( !defined( 'WP_ENV' )) {
 		    define( 'WP_ENV' , 'production' );
 		}
@@ -143,11 +145,9 @@
 			return $post_id;
 		}
 		
-		// Check if nonce is set
+		// Check nonce, user capabilities
 		check_admin_referer( 'update_save_meta', 'save_meta' );
-
-		if ( ! current_user_can( 'edit_post' ) && ! wp_is_post_autosave( $post_id ) ) 
-			return $post_id;
+		if ( ! current_user_can( 'edit_post' ) && ! wp_is_post_autosave( $post_id ) ) return $post_id;
 
 		if ( $newreviewer && get_user_by( 'slug', $newreviewer ) ) {
 		
@@ -265,7 +265,7 @@
 	}
 
 	/**
-	/* Show the Plugin Dashboard Settings Page
+	/* Show the Dashboard Settings Page
 	/* 
 	 * @since  1.1
 	 * @access public
@@ -273,23 +273,14 @@
 	 */	
 	function show_settings_page() {
 		
+		$result = array();
+		
 		if ( !current_user_can( 'edit_pages' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 
 		// PAGES
 		$this->all_pages = $this->get_page_updates();
-		$update_args = array( 
-			'meta_key' => 'idies_status_update',
-			'meta_compare' => 'NOT EXISTS', 
-			'meta_value' => '' ,
-		);
-		$updated_pages = $this->get_page_updates( $update_args );
-		$completed_args = array( 
-			'meta_key' => 'idies_status_update',
-			'meta_value' => 'completed' ,
-		);
-		$completed_pages = $this->get_page_updates( $completed_args );
 		
 		// Get Action
 		$the_action = ( isset( $_POST['export'] ) ? 'export' :
@@ -303,11 +294,11 @@
 		if ( ( $the_action ) && ( ! empty( $_POST ) && check_admin_referer( 'update_idies_settings' , 'update_nonce' ) ) ) {
 		
 			switch ($the_action) {
+				case 'export' :
+					//$this->export( $result );
+				break;
 				case 'import' :
 					$this->import();
-				break;
-				case 'export' :
-					$this->export();
 				break;
 				case 'nuclear' :
 					if ( !current_user_can( 'edit_theme_options' ) ) {
@@ -330,10 +321,28 @@
 			$this->default_status = get_option( 'idies_default_status' , $this->default_status );
 		
 		}
-
+		echo $this->write_export_data();
+		
+		// More info
+		$update_args = array( 
+			'meta_key' => 'idies_update_status',
+			'meta_compare' => 'NOT EXISTS', 
+			'meta_value' => 'foobar' ,
+		);
+		$updated_pages = $this->get_page_updates( $update_args );
+		$completed_args = array( 
+			'meta_key' => 'idies_update_status',
+			'meta_value' => 'completed' ,
+		);
+		$completed_pages = $this->get_page_updates( $completed_args );
+		
 		// Show the form
 		echo '<div class="wrap">';
 		echo '<h1>Status Updates Settings</h1>';
+		
+		foreach ($result as $thiskey=>$thisvalue) {
+			echo '<div class="updated notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+		}
 		
 		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings">';
 		echo '<input type="hidden" name="options" value="settings">';
@@ -383,12 +392,12 @@
 		
 		echo '<tr>';
 		echo '<th scope="row">Export Page Updates as CSV...</th>';
-		echo '<td><button class="button button-secondary" id="export" name="export" value="export">Export</button></td>';
+		echo '<td><a class="button button-secondary" onclick="export( export_data, \'status-update.csv\', \'text/plain\' );">Export</a></td>';
 		echo '</tr>';
 
 		echo '<tr>';
 		echo '<th scope="row">Import Page Updates CSV...</th>';
-		echo '<td><button class="button button-secondary" id="import" name="import" value="export">Import</button></td>';
+		echo '<td><button class="button button-secondary" id="import" name="import" value="import">Import</button></td>';
 		echo '</tr>';
 				
 		echo '<tr>';
@@ -412,7 +421,7 @@
 	 * @access public
 	 * @return void
 	 */	
-	function get_page_updates( $args = array() ) {
+	function get_page_updates( $newargs = array() ) {
 		
 		// Get or Set query variables
 		$paged = isset( $_GET[ 'paged' ] ) ? 											// page 1
@@ -446,19 +455,21 @@
 					absint( $_GET[ 'offset' ] ) : 
 					0 ;
 
-		$defaults = array(
-			'sort_order' => $order,
-			'sort_column' => $orderby,
-			'posts_per_page' => $number,
+		$args = array(
+			'order' => $order,
+			'orderby' => $orderby,
+			'posts_per_page' => -1,
 			'offset' => $offset,
 			'post_type' => $this->post_type,
 			'post_status' => $this->post_status,
 		); 
-
-		$args = wp_parse_args( $args, $defaults );
+		foreach ($newargs as $thiskey=>$thisvalue) 
+			$args[$thiskey] = $thisvalue;
 		
-		$my_pages = get_pages( $args ); 
+		$my_pages = get_posts( $args );
+		
 		return $my_pages;
+
 	}
 
 	/**
@@ -623,14 +634,105 @@
 	}		
 
 	/**
+	// Write CSV Export to js var in page script
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return $result
+	 */	
+	function write_export_data(  ) {
+	
+		$sep = ',';
+		$quo = '"';
+		
+		$output = 
+			$quo . "ID" . $quo . $sep . 
+			$quo . "Title" . $quo . $sep .
+			$quo . "Edit" . $quo . $sep .
+			$quo . "View" . $quo . $sep .
+			$quo . "Status" . $quo . $sep .
+			$quo . "Reviewer" . $quo . $sep .
+			$quo . "Comment" . $quo . $sep .
+			$quo . "Last Revised" . $quo . '\r\n';
+		foreach ( $this->all_pages as $thispage ){
+			//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
+			$output .= 
+				$thispage->ID . $sep . 
+				$quo . $thispage->post_title . $quo . $sep . 
+				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
+				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep . 
+				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
+				$quo . $thispage->post_modified . $quo . '\r\n';
+		}
+	
+		$result = "<script>export_data='$output';" .
+			"function export(text, name, type) { ".
+			"var a = document.getElementById('a'); " .
+			"var file = new Blob([text], {type: type}); " .
+			"a.href = URL.createObjectURL(file); " .
+			"var file = new Blob([text], {type: type}); " .
+			"download = name; " .
+			"} " .
+			"</script>\n";
+		return $result;
+	}		
+
+	/**
 	// Export a CSV file with Page Status Updates
 	/* 
 	 * @since  1.1
 	 * @access public
-	 * @return void
+	 * @return $result: single element array of ("alert-display-class"=>"success/failure message")
 	 */	
-	function export() {
-	
+	function export( &$result ) {
+		
+		$fname = new DateTime();
+		$fname = 'status-update-' . $fname->format('YmdHis') . '.csv';
+		$pname = '/tmp/' . $fname;
+		
+		$sep = ',';
+		$quo = '"';
+		
+		$output = 
+			$quo . "ID" . $quo . $sep . 
+			$quo . "Title" . $quo . $sep .
+			$quo . "Edit" . $quo . $sep .
+			$quo . "View" . $quo . $sep .
+			$quo . "Status" . $quo . $sep .
+			$quo . "Reviewer" . $quo . $sep .
+			$quo . "Comment" . $quo . $sep .
+			$quo . "Last Revised" . $quo . "\n";
+		foreach ( $this->all_pages as $thispage ){
+			//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
+			$output .= 
+				$thispage->ID . $sep . 
+				$quo . $thispage->post_title . $quo . $sep . 
+				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
+				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep . 
+				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
+				$quo . $thispage->post_modified . $quo . PHP_EOL;
+		}
+		
+		//write temp file
+		$myfile = fopen($pname, "w") or die("Unable to create ". $fname ." file.");
+		fwrite($myfile, $output);
+		fclose($myfile);
+		
+		//deliver content with header to be downloaded and saved locally
+		header('Content-Disposition: attachment; filename=' . $fname);
+		header('Content-Type: text/plain');
+		header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($pname)) . ' GMT');
+		header('Content-Length: ' . filesize($pname));
+		header('Content-Encoding: none');
+
+		//require 'idies-export-csv.php';
+		
+		$result['success']="$pname";
+		return $result;
 	}	
 
 	/**
@@ -649,39 +751,6 @@
 		}
 	
 	}		
-
-	/**
-	/* do activation stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function activate() {
-		//do activation stuff
-	}
-	
-	/**
-	/* do de-activation stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function deactivate() {
-		// clean up on deactivation
-	}
-	
-	/**
-	/* do setup stuff
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function setup() {
-		// clean up on deactivation
-	}
 	
 	/**
 	/* Show the status on a page, under the content.
@@ -699,7 +768,7 @@
 		
 		// No status - no show
 		$status = get_post_meta( get_the_ID() , 'idies_update_status', true );
-		if ( empty( $status ) ) return $content;		
+		if ( empty( $status ) ) return $content;
 		$reviewer = get_post_meta( get_the_ID() , 'idies_update_reviewer', true );
 		$comments = get_post_meta( get_the_ID() , 'idies_update_comment', true );
 		

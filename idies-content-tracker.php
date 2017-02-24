@@ -32,7 +32,7 @@ if ( defined( 'ICT_PASSWORD_VERSION' ) ) die('IDIES Content Tracker vesion ' . I
 define('ICT_PASSWORD_VERSION', '1.1');
 
 define('ICT_DIR_PATH',plugin_dir_path( __FILE__ ));
-define('ICT_DIR_URL',plugins_url());
+define('ICT_DIR_URL',plugin_dir_url( __FILE__ ));
 
 // load the class file
 require_once( ICT_DIR_PATH . 'lib/idies-content-tracker.php' );
