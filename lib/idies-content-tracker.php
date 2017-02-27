@@ -76,6 +76,34 @@
 	public $all_users = array();
 	
 	/**
+	 * Name of directory to hold temporary files.
+	 *
+	 * @var    string
+	 */	 
+	public $tmpdir;
+	
+	/**
+	 * Name of url for temporary files.
+	 *
+	 * @var    string
+	 */	 
+	public $tmpurl;
+	
+	/**
+	 * Name of temporary export csv file.
+	 *
+	 * @var    string
+	 */	 
+	public $export_fname;	
+	
+	/**
+	 * CSV field names in import/export file
+	 *
+	 * @var    string
+	 */	 
+	public $csv_fields;
+	
+	/**
 	 * Public constructor method to prevent a new instance of the object.
 	 *
 	 * @since  1.0.0
@@ -107,10 +135,19 @@
 		// Set up Variables
 		$this->default_reviewer = 'bsouter';
 		$this->default_status = 'not-started';
-		$this->all_users = get_users( 'orderby=nicename' );		
-		//Don't need to do this unless on the Settings or Overview page.
-		//$this->all_pages = $this->get_page_updates();
-
+		$this->all_users = get_users( 'orderby=nicename' );	
+		$this->tmpdir = '/data1/dswww-ln01/sdss.org/tmp/';
+		$this->tmpurl = '/wp-tmp/';
+		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
+		$this->csv_fields = array("ID", 
+			"Title",
+			"Edit",
+			"View",
+			"Status",
+			"Reviewer",
+			"Comment",
+			"Last Revised" );
+		
 		$this->statuses = array(
 			"not-started"=>"Not Started",
 			"in-progress"=>"In Progress",
@@ -265,7 +302,7 @@
 	}
 
 	/**
-	/* Show the Dashboard Settings Page
+	/* Show the Dashboard SETTINGS Page
 	/* 
 	 * @since  1.1
 	 * @access public
@@ -283,22 +320,18 @@
 		$this->all_pages = $this->get_page_updates();
 		
 		// Get Action
-		$the_action = ( isset( $_POST['export'] ) ? 'export' :
-			( isset( $_POST['import'] ) ? 'import' :
-				( isset( $_POST['nuclear'] ) ? 
-					'nuclear' :
-					( isset( $_POST['action'] ) ? 
-						'update' :
-						false ) ) ) );
+		$the_action = ( isset( $_POST['update'] ) ? 'update' :
+					  ( isset( $_POST['nuclear'] ) ? 'nuclear' :
+					  ( isset( $_POST['import'] ) ? 'import' :
+						false ) ) );
 						
-		if ( ( $the_action ) && ( ! empty( $_POST ) && check_admin_referer( 'update_idies_settings' , 'update_nonce' ) ) ) {
+		if ( ( $the_action ) 
+				&& ( ! empty( $_POST ) 
+				&& check_admin_referer( 'update_idies_settings' , 'update_nonce' ) ) ) {
 		
 			switch ($the_action) {
-				case 'export' :
-					//$this->export( $result );
-				break;
 				case 'import' :
-					$this->import();
+					$result = $this->import();
 				break;
 				case 'nuclear' :
 					if ( !current_user_can( 'edit_theme_options' ) ) {
@@ -321,6 +354,8 @@
 			$this->default_status = get_option( 'idies_default_status' , $this->default_status );
 		
 		}
+		
+		// Write the export file each time page is loaded.
 		echo $this->write_export_data();
 		
 		// More info
@@ -341,12 +376,12 @@
 		echo '<h1>Status Updates Settings</h1>';
 		
 		foreach ($result as $thiskey=>$thisvalue) {
-			echo '<div class="updated notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+			echo '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 		}
 		
 		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings">';
 		echo '<input type="hidden" name="options" value="settings">';
-		echo '<input type="hidden" name="action" value="update">';
+		echo '<input type="hidden" name="update" value="update">';
 		wp_nonce_field( 'update_idies_settings' , 'update_nonce' );
 		
 		echo '<table class="form-table">';
@@ -375,29 +410,42 @@
 		echo '</td>';
 		echo '</tr>';
 		
+		echo '</tbody>';
+		echo '</table>';
+		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
+		echo '</form>';
+
+		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings" enctype="multipart/form-data">';
+		wp_nonce_field( 'update_idies_settings' , 'update_nonce' );
+		echo '<table class="form-table">';
+		echo '<tbody>';
+
 		echo '<tr>';
 		echo '<th scope="row">All Pages<br><em>Includes published, private, and draft</em></th>';
 		echo '<td>' . count( $this->all_pages ) . '</td>';
 		echo '</tr>';
 		
 		echo '<tr>';
-		echo '<th scope="row">Status Complete</th>';
+		echo '<th scope="row">Complete Pages</th>';
 		echo '<td>' . count( $completed_pages ) . '</td>';
 		echo '</tr>';
 		
 		echo '<tr>';
-		echo '<th scope="row">Status Not Set</th>';
+		echo '<th scope="row">No Status Pages</th>';
 		echo '<td>' . count( $updated_pages ) . '</td>';
 		echo '</tr>';
 		
 		echo '<tr>';
 		echo '<th scope="row">Export Page Updates as CSV...</th>';
-		echo '<td><a class="button button-secondary" onclick="export( export_data, \'status-update.csv\', \'text/plain\' );">Export</a></td>';
+		echo '<td><a class="button button-secondary" href="' . $this->tmpurl . $this->export_fname . '">Export</a></td>';
 		echo '</tr>';
 
 		echo '<tr>';
-		echo '<th scope="row">Import Page Updates CSV...</th>';
-		echo '<td><button class="button button-secondary" id="import" name="import" value="import">Import</button></td>';
+		echo '<th scope="row" rowspan="2">Import Page Updates CSV...</th>';
+		echo '<td><input type="file" name="importfile" id="importfile" class="widefat"></td>';
+		echo '</tr>';
+		echo '<tr>';
+		echo '<td><button type="submit" class="button button-primary" id="import" name="import" value="import">Import</button></td>';
 		echo '</tr>';
 				
 		echo '<tr>';
@@ -407,7 +455,6 @@
 
 		echo '</tbody>';
 		echo '</table>';
-		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
 		echo '</form>';
 		echo '</div>';
 
@@ -630,72 +677,64 @@
 	 * @return void
 	 */	
 	function import() {
-	
+		//idies_debug( $_POST ) ;
+		//idies_debug( $_FILES ) ;
+		//idies_debug( pathinfo( $_FILES['importfile']['name'] , PATHINFO_EXTENSION ) ) ;
+		$status = "error";
+		
+		$imageFileType = pathinfo( $_FILES['importfile']['name'] , PATHINFO_EXTENSION);
+		
+		if ( $imageFileType != "csv" && $imageFileType != "CSV" && $imageFileType != "txt" ) {
+			return array("error"=>"Wrong file type. Only CSV file uploads allowed.");
+		}
+		$contents = file($_FILES['importfile']['tmp_name']); 
+		$fields = str_getcsv( array_shift( $contents ) );
+		//idies_debug( count(array_diff( $fields , $this->csv_fields ) ) ) ;
+		
+		// Check that the fields match
+		if ( !count( array_diff( $fields , $this->csv_fields ) ) == 0 ) 
+			return array( "error"=>"CSV file must contain the following column titles: " . implode(",",$this->csv_fields) );
+
+		//loop through the csv and update all the files
+		$error = '' ; 
+		foreach( $contents as $this_line ) {
+		$this_csv = str_getcsv( $this_line ) ;
+			if ( get_user_by( 'slug', $this_csv[5] ) === false ) {
+				$error .= "CSV Error. User not found: " . $this_csv[5] . "<br>\n";
+				continue;
+			}
+			update_post_meta( $this_csv[0]  , 'idies_update_reviewer' , $this_csv[5] ) ;
+			update_post_meta( $this_csv[0]  , 'idies_update_status' , $this_csv[4] ) ;
+			update_post_meta( $this_csv[0]  , 'idies_update_comment' , $this_csv[6] ) ;
+		}
+
+		if ( strlen($error) == 0 ) $status = "success";
+		return array($status=>"Uploaded " . $_FILES['importfile']['name'] . ". " . $error) ;
+		
 	}		
 
 	/**
-	// Write CSV Export to js var in page script
+	// Write Status Updates CSV export file
 	/* 
 	 * @since  1.1
 	 * @access public
 	 * @return $result
 	 */	
 	function write_export_data(  ) {
-	
-		$sep = ',';
-		$quo = '"';
-		
-		$output = 
-			$quo . "ID" . $quo . $sep . 
-			$quo . "Title" . $quo . $sep .
-			$quo . "Edit" . $quo . $sep .
-			$quo . "View" . $quo . $sep .
-			$quo . "Status" . $quo . $sep .
-			$quo . "Reviewer" . $quo . $sep .
-			$quo . "Comment" . $quo . $sep .
-			$quo . "Last Revised" . $quo . '\r\n';
-		foreach ( $this->all_pages as $thispage ){
-			//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
-			$output .= 
-				$thispage->ID . $sep . 
-				$quo . $thispage->post_title . $quo . $sep . 
-				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
-				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep . 
-				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
-				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
-				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
-				$quo . $thispage->post_modified . $quo . '\r\n';
-		}
-	
-		$result = "<script>export_data='$output';" .
-			"function export(text, name, type) { ".
-			"var a = document.getElementById('a'); " .
-			"var file = new Blob([text], {type: type}); " .
-			"a.href = URL.createObjectURL(file); " .
-			"var file = new Blob([text], {type: type}); " .
-			"download = name; " .
-			"} " .
-			"</script>\n";
-		return $result;
-	}		
 
-	/**
-	// Export a CSV file with Page Status Updates
-	/* 
-	 * @since  1.1
-	 * @access public
-	 * @return $result: single element array of ("alert-display-class"=>"success/failure message")
-	 */	
-	function export( &$result ) {
-		
-		$fname = new DateTime();
-		$fname = 'status-update-' . $fname->format('YmdHis') . '.csv';
-		$pname = '/tmp/' . $fname;
-		
+		$output = '';
 		$sep = ',';
 		$quo = '"';
+
+		//header to be downloaded and saved locally
+		//$output .= "header('Content-Disposition: attachment; filename=' . $this->export_fname)" . "\n";
+		//$output .= "header('Content-Type: text/plain')" . "\n";
 		
-		$output = 
+		//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
+		foreach ( $this->csv_fields as $this_field) $output .= $quo . implode( $quo . $sep , $this->csv_fields ). $quo . "\n"; 
+			
+		/* 
+		$output .= 
 			$quo . "ID" . $quo . $sep . 
 			$quo . "Title" . $quo . $sep .
 			$quo . "Edit" . $quo . $sep .
@@ -704,36 +743,25 @@
 			$quo . "Reviewer" . $quo . $sep .
 			$quo . "Comment" . $quo . $sep .
 			$quo . "Last Revised" . $quo . "\n";
+		*/
+			
 		foreach ( $this->all_pages as $thispage ){
-			//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
 			$output .= 
 				$thispage->ID . $sep . 
 				$quo . $thispage->post_title . $quo . $sep . 
 				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
-				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep . 
+				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep .  
 				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
-				$quo . $thispage->post_modified . $quo . PHP_EOL;
+				$quo . $thispage->post_modified . $quo . "\n";
 		}
 		
 		//write temp file
-		$myfile = fopen($pname, "w") or die("Unable to create ". $fname ." file.");
-		fwrite($myfile, $output);
-		fclose($myfile);
-		
-		//deliver content with header to be downloaded and saved locally
-		header('Content-Disposition: attachment; filename=' . $fname);
-		header('Content-Type: text/plain');
-		header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($pname)) . ' GMT');
-		header('Content-Length: ' . filesize($pname));
-		header('Content-Encoding: none');
-
-		//require 'idies-export-csv.php';
-		
-		$result['success']="$pname";
-		return $result;
-	}	
+		$expfile = fopen( $this->tmpdir . $this->export_fname , "w") or die("Unable to create ". $this->tmpdir . $this->export_fname ." file.");
+		fwrite($expfile, $output);
+		fclose($expfile);
+	}		
 
 	/**
 	/* Nuclear option to reset Page reviewer, status, and comments to defaults
