@@ -45,14 +45,14 @@
 	 *
 	 * @var    string
 	 */
-	public $default_reviewer = 'bsouter';
+	public $default_reviewer;
 	
 	/**
 	 * Default page status.
 	 *
 	 * @var    string
 	 */
-	public $default_status = 'not-started';
+	public $default_status;
 
 	/**
 	 * Which publication status to show update status on.
@@ -80,7 +80,7 @@
 	 *
 	 * @var    string
 	 */	 
-	public $tmpdir;
+	public $default_tmppath;
 	
 	/**
 	 * Name of url for temporary files.
@@ -135,9 +135,11 @@
 		// Set up Variables
 		$this->default_reviewer = 'bsouter';
 		$this->default_status = 'not-started';
+		//$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		$this->default_tmppath = '/var/www/idies.jhu.edu/tmp/';
+		$this->post_status  = 'publish,private,draft';
+		
 		$this->all_users = get_users( 'orderby=nicename' );	
-		$this->tmpdir = '/data1/dswww-ln01/sdss.org/tmp/';
-		$this->tmpurl = '/wp-tmp/';
 		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
 		$this->csv_fields = array("ID", 
 			"Title",
@@ -147,7 +149,11 @@
 			"Reviewer",
 			"Comment",
 			"Last Revised" );
-		
+
+		//UPDATE DEPENDING ON WEBSITE
+		$this->tmpurl = '/wp-tmp/';
+			
+			
 		$this->statuses = array(
 			"not-started"=>"Not Started",
 			"in-progress"=>"In Progress",
@@ -252,7 +258,7 @@
 	?>
 	<table class="form-table meta-box">
 	<tr>
-	<th scope="row"><label for="idies_update_meta_box_status">Status</label></th>
+	<th scope="row"><label for="meta_box_status">Status</label></th>
     <td><?php
 		echo '<select  class="postbox" name="meta_box_status" id="meta-box-status">';
 		foreach ( $this->statuses as $thiskey=>$thisstatus ) {
@@ -262,7 +268,7 @@
 	?></td>
 	</tr>
 	<tr>
-	<th scope="row"><label for="idies_update_meta_box_reviewer">Reviewer</label></th>
+	<th scope="row"><label for="meta_box_reviewer">Reviewer</label></th>
     <td><?php
 		echo '<select  class="postbox" name="meta_box_reviewer" id="meta-box-reviewer">';
 		foreach ( $this->all_users as $thisuser ) {
@@ -272,7 +278,7 @@
 	?></td>
 	</tr>
 	<tr>
-	<th scope="row"><label for="idies_update_meta_box_comment">Comments</label></th>
+	<th scope="row"><label for="meta_box_comment">Comments</label></th>
     <td><?php
 		echo '<textarea class="postbox" rows="10" cols="60" name="meta_box_comment" id="meta-box-comment">' . $comment . '</textarea>';
 	?></td>
@@ -341,6 +347,8 @@
 					}
 				break;
 				case 'update' :
+					$this->default_tmppath = isset( $_POST[ 'default_tmppath' ] ) ? $_POST[ 'default_tmppath' ] : get_option( 'idies_default_tmppath' , $this->default_tmppath );
+					update_option( 'idies_default_tmppath' , $this->default_tmppath );
 					$this->default_reviewer = isset( $_POST[ 'default_reviewer' ] ) ? $_POST[ 'default_reviewer' ] : get_option( 'idies_default_reviewer' , $this->default_reviewer );
 					update_option( 'idies_default_reviewer' , $this->default_reviewer );
 					$this->default_status = isset( $_POST[ 'default_status' ] ) ? $_POST[ 'default_status' ] : get_option( 'idies_default_status' , $this->default_status );
@@ -350,13 +358,14 @@
 			
 		} else {
 		
+			$this->default_tmppath = get_option( 'idies_default_tmppath' , $this->default_tmppath );
 			$this->default_reviewer = get_option( 'idies_default_reviewer' , $this->default_reviewer );
 			$this->default_status = get_option( 'idies_default_status' , $this->default_status );
 		
 		}
 		
 		// Write the export file each time page is loaded.
-		echo $this->write_export_data();
+		$this->write_export_data();
 		
 		// More info
 		$update_args = array( 
@@ -386,6 +395,14 @@
 		
 		echo '<table class="form-table">';
 		echo '<tbody>';
+
+		echo '<tr>';
+		echo '<th scope="row">Default Path (Writable dir for temp files)</th>';
+		echo '<td>';
+		echo '<input name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
+		echo '</select>';
+		echo '</td>';
+		echo '</tr>';
 
 		echo '<tr>';
 		echo '<th scope="row">Default Reviewer</th>';
@@ -421,36 +438,47 @@
 		echo '<tbody>';
 
 		echo '<tr>';
-		echo '<th scope="row">All Pages<br><em>Includes published, private, and draft</em></th>';
+		echo '<th scope="row">All Pages</th>';
 		echo '<td>' . count( $this->all_pages ) . '</td>';
+		echo '<td><em>Includes published, private, and draft</em></td>';
 		echo '</tr>';
 		
 		echo '<tr>';
-		echo '<th scope="row">Complete Pages</th>';
+		echo '<th scope="row">Complete</th>';
 		echo '<td>' . count( $completed_pages ) . '</td>';
+		echo '<td><em>Pages that have "Completed" status</em></td>';
 		echo '</tr>';
 		
 		echo '<tr>';
 		echo '<th scope="row">No Status Pages</th>';
 		echo '<td>' . count( $updated_pages ) . '</td>';
+		echo '<td><em>Pages with blank status can be update on indivudual pages.</em></td>';
 		echo '</tr>';
 		
 		echo '<tr>';
 		echo '<th scope="row">Export Page Updates as CSV...</th>';
 		echo '<td><a class="button button-secondary" href="' . $this->tmpurl . $this->export_fname . '">Export</a></td>';
+		echo '<td><em>Export to CSV file to update Status, Reviewer, and Comments of multiple pages manually.</em></td>';
 		echo '</tr>';
 
 		echo '<tr>';
 		echo '<th scope="row" rowspan="2">Import Page Updates CSV...</th>';
-		echo '<td><input type="file" name="importfile" id="importfile" class="widefat"></td>';
+		echo '<td colspan="2"><input type="file" name="importfile" id="importfile" class="widefat"></td>';
 		echo '</tr>';
 		echo '<tr>';
 		echo '<td><button type="submit" class="button button-primary" id="import" name="import" value="import">Import</button></td>';
+		echo '<td scope="row"><em>N.b. you can only update the <strong>Reviewer</strong>, <strong>Status</strong>, ' . 
+			 'and/or <strong>Comments</strong> with CSV import. All other columns are ignored (but ' .
+			 'column titles and order must match CSV Export file). ' .
+			 'Also, the <strong>Reviewer</strong> must be a WordPress login for a valid user ' .
+			 '(e.g. bsouter), not a display name (e.g. Bonnie Souter). You can find users\' login ' . 
+			 'names on <a href="/wp-admin/users.php">All Users</a>.</em></td>';
 		echo '</tr>';
 				
 		echo '<tr>';
-		echo '<th scope="row">Nuclear Option: <br>Set All to Default Status & Reviewer</th>';
+		echo '<th scope="row">Nuclear Option: <br></th>';
 		echo '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Go Nuclear</button></td>';
+		echo '<td><em>Reset all pages\' to default status, reviewer, and delete comments.</em></td>';
 		echo '</tr>';
 
 		echo '</tbody>';
@@ -677,9 +705,7 @@
 	 * @return void
 	 */	
 	function import() {
-		//idies_debug( $_POST ) ;
-		//idies_debug( $_FILES ) ;
-		//idies_debug( pathinfo( $_FILES['importfile']['name'] , PATHINFO_EXTENSION ) ) ;
+
 		$status = "error";
 		
 		$imageFileType = pathinfo( $_FILES['importfile']['name'] , PATHINFO_EXTENSION);
@@ -689,7 +715,6 @@
 		}
 		$contents = file($_FILES['importfile']['tmp_name']); 
 		$fields = str_getcsv( array_shift( $contents ) );
-		//idies_debug( count(array_diff( $fields , $this->csv_fields ) ) ) ;
 		
 		// Check that the fields match
 		if ( !count( array_diff( $fields , $this->csv_fields ) ) == 0 ) 
@@ -699,12 +724,18 @@
 		$error = '' ; 
 		foreach( $contents as $this_line ) {
 		$this_csv = str_getcsv( $this_line ) ;
+			
+			// Validate input
 			if ( get_user_by( 'slug', $this_csv[5] ) === false ) {
-				$error .= "CSV Error. User not found: " . $this_csv[5] . "<br>\n";
+				$error .= "Error. User not found: " . $this_csv[5] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
 				continue;
-			}
+			} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
+				$error .= "Error. Status not found: " . $this_csv[4] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
+				continue;
+			}			
+			
 			update_post_meta( $this_csv[0]  , 'idies_update_reviewer' , $this_csv[5] ) ;
-			update_post_meta( $this_csv[0]  , 'idies_update_status' , $this_csv[4] ) ;
+			update_post_meta( $this_csv[0]  , 'idies_update_status' , $this_key ) ;
 			update_post_meta( $this_csv[0]  , 'idies_update_comment' , $this_csv[6] ) ;
 		}
 
@@ -731,8 +762,8 @@
 		//$output .= "header('Content-Type: text/plain')" . "\n";
 		
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
-		foreach ( $this->csv_fields as $this_field) $output .= $quo . implode( $quo . $sep , $this->csv_fields ). $quo . "\n"; 
-			
+		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
+		
 		/* 
 		$output .= 
 			$quo . "ID" . $quo . $sep . 
@@ -758,9 +789,10 @@
 		}
 		
 		//write temp file
-		$expfile = fopen( $this->tmpdir . $this->export_fname , "w") or die("Unable to create ". $this->tmpdir . $this->export_fname ." file.");
+		$expfile = fopen( $this->default_tmppath . $this->export_fname , "w") or die("Unable to create ". $this->default_tmppath . $this->export_fname ." file.");
 		fwrite($expfile, $output);
 		fclose($expfile);
+		
 	}		
 
 	/**
