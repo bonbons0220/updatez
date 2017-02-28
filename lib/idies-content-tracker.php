@@ -131,12 +131,15 @@
 		
 		// Save Status Update Post Data
 		add_action('save_post', array( $this , 'idies_update_save_meta' ) );
+
+		add_action( 'manage_pages_custom_column', array( $this , 'idies_page_column_content' ) , 10 , 2 );
+		add_filter( 'manage_pages_columns', array( $this , 'idies_custom_pages_columns' ) );
 		
 		// Set up Variables
 		$this->default_reviewer = 'bsouter';
 		$this->default_status = 'not-started';
-		//$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
-		$this->default_tmppath = '/var/www/idies.jhu.edu/tmp/';
+		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		//$this->default_tmppath = '/var/www/idies.jhu.edu/tmp/';
 		$this->post_status  = 'publish,private,draft';
 		
 		$this->all_users = get_users( 'orderby=nicename' );	
@@ -300,10 +303,10 @@
 		add_menu_page( 'Status Updates' , 'Status Updates', 'edit_pages', 'idies-status-menu' , array( $this , 'show_settings_page' ) ); 
 		
 		// Add Settings page to the submenu
-		add_submenu_page( 'idies-status-menu' , 'Status Update Settings' , 'Settings' , 'edit_pages' , 'idies-status-settings' , array( $this , 'show_settings_page' ) );
+		//add_submenu_page( 'idies-status-menu' , 'Status Update Settings' , 'Settings' , 'edit_pages' , 'idies-status-settings' , array( $this , 'show_settings_page' ) );
 		
 		// Add Overview page to the submenu
-		add_submenu_page( 'idies-status-menu' , 'Page Status Overview' , 'Overview' , 'edit_pages' , 'idies-status-overview' , array( $this , 'show_overview_page' ) );
+		//add_submenu_page( 'idies-status-menu' , 'Page Status Overview' , 'Overview' , 'edit_pages' , 'idies-status-overview' , array( $this , 'show_overview_page' ) );
 		
 	}
 
@@ -347,11 +350,14 @@
 					}
 				break;
 				case 'update' :
-					$this->default_tmppath = isset( $_POST[ 'default_tmppath' ] ) ? $_POST[ 'default_tmppath' ] : get_option( 'idies_default_tmppath' , $this->default_tmppath );
-					update_option( 'idies_default_tmppath' , $this->default_tmppath );
-					$this->default_reviewer = isset( $_POST[ 'default_reviewer' ] ) ? $_POST[ 'default_reviewer' ] : get_option( 'idies_default_reviewer' , $this->default_reviewer );
+				
+					$this->default_tmppath = isset( $_POST[ 'default_tmppath' ] ) ? sanitize_file_name( $_POST[ 'default_tmppath' ] ) : get_option( 'idies_default_tmppath' , $this->default_tmppath );
+					update_option( 'idies_default_tmppath' , trailingslashit( $this->default_tmppath ) );
+					
+					$this->default_reviewer = isset( $_POST[ 'default_reviewer' ] ) ? sanitize_user( $_POST[ 'default_reviewer' ] ) : get_option( 'idies_default_reviewer' , $this->default_reviewer );
 					update_option( 'idies_default_reviewer' , $this->default_reviewer );
-					$this->default_status = isset( $_POST[ 'default_status' ] ) ? $_POST[ 'default_status' ] : get_option( 'idies_default_status' , $this->default_status );
+					
+					$this->default_status = isset( $_POST[ 'default_status' ] ) ? sanitize_text_field( $_POST[ 'default_status' ] ) : get_option( 'idies_default_status' , $this->default_status );
 					update_option( 'idies_default_status' , $this->default_status );
 				break;
 			}
@@ -388,7 +394,7 @@
 			echo '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 		}
 		
-		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings">';
+		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-menu">';
 		echo '<input type="hidden" name="options" value="settings">';
 		echo '<input type="hidden" name="update" value="update">';
 		wp_nonce_field( 'update_idies_settings' , 'update_nonce' );
@@ -432,7 +438,7 @@
 		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
 		echo '</form>';
 
-		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-settings" enctype="multipart/form-data">';
+		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-menu" enctype="multipart/form-data">';
 		wp_nonce_field( 'update_idies_settings' , 'update_nonce' );
 		echo '<table class="form-table">';
 		echo '<tbody>';
@@ -452,7 +458,7 @@
 		echo '<tr>';
 		echo '<th scope="row">No Status Pages</th>';
 		echo '<td>' . count( $updated_pages ) . '</td>';
-		echo '<td><em>Pages with blank status can be update on indivudual pages.</em></td>';
+		echo '<td><em>Pages with blank status can be updated on individual pages.</em></td>';
 		echo '</tr>';
 		
 		echo '<tr>';
@@ -546,156 +552,6 @@
 		return $my_pages;
 
 	}
-
-	/**
-	// Show the Status Updates Overview Page in the Backend
-	/* 
-	 * @since  1.1
-	 * @access public
-	 * @return void
-	 */	
-	function show_overview_page() {
-	
-		if ( !current_user_can( 'edit_pages' ) )  {
-			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
-		}
-		
-		$status_options = array_merge( 
-			array( 'all-status'=>'Any Update Status') , 
-			$this->statuses , 
-			array( 'no-status'=>'No Status' )
-		);
-		
-		// Query vars
-		$filter_status = ( isset( $_POST['filter_status'] ) ) ?	sanitize_text( $_POST['filter_status'] ) : 'all-status' ;
-		$filter_reviewer = ( isset( $_POST['filter_reviewer'] ) ) ?	sanitize_text( $_POST['filter_reviewer'] ) : 'all-reviewers' ;
-		
-		$paged = isset( $_GET[ 'paged' ] ) ? absint( $_GET[ 'paged' ] ) : 1 ;
-		$offset = isset( $_GET[ 'paged' ] ) ? absint( $_GET[ 'paged' ] ) : 1 ;
-
-		$order = ( isset( $_GET['order'] ) && in_array( $_GET['order'] , array( 'asc' , 'desc' ) ) ) ?
-				$_GET['order'] : 'asc';
-				
-		$orderby_columns = array( 
-			'title'=>'Title' ,
-			'reviewer'=>'Reviewer' , 
-			'update-status'=>'Update Status' , 
-			'page-status'=>'Page Status' , 
-			'post-modified'=>'Last Revised' );
-		$orderby = ( isset( $_GET['orderby'] ) && array_key_exists( $_GET['orderby'] , $orderby_columns ) ) ?
-			$_GET['orderby'] : 'title' ;
-		
-		// GET PAGES
-		$this->all_pages = $this->get_page_updates();
-
-		echo '<div class="wrap">';
-		echo '<h1>Page Status Overview</h1>';
-		echo '<hr>';
-		echo '<form method="get" action="/wp-admin/admin.php?page=idies-status-overview" >';
-		wp_nonce_field( 'update_idies_overview' , 'update_overview' );		
-?>
-<div class="tablenav top">
-	<div class="alignleft actions bulkactions">
-		<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
-		<select name="action" id="bulk-action-selector-top">
-			<option value="-1">Bulk Actions</option>
-			<option value="edit" class="hide-if-no-js">Update Status</option>
-			</select>
-		<input type="submit" id="doaction" class="button action" value="Apply">
-	</div>
-	<div class="alignleft actions">
-		<label for="filter-by-status" class="screen-reader-text">Filter by Status</label>
-		<select name="filter-by-status" id="filter-by-status">
-<?php
-		foreach ( $status_options as $thiskey => $thisvalue ) 
-			echo '<option value="' . $thiskey . '" ' . selected( 'this-key' , $filter_status ) . '>' . $thisvalue. '</option>';
-?>
-		</select>
-		<label for="filter-by-reviewer" class="screen-reader-text">Filter by Reviewer</label>
-		<select name="filter-by-reviewer" id="filter-by-reviewer">
-		<option value="all-reviewers" <?php selected( $filter_reviewer , 'all-reviewers' ); ?> >All Reviewers</option>
-<?php
-		foreach ( $this->all_users as $thisuser ) 
-			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $filter_reviewer , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
-?>
-		</select>
-	</div>
-	<h2 class="screen-reader-text">Status of Page Update List Nav</h2>
-	<br class="clear">
-</div>
-<h2 class="screen-reader-text">List of Page Status Updates</h2>
-<table class="wp-list-table widefat fixed striped pages">
-<thead>
-<tr>
-	<td id="cb" class="manage-column column-cb check-column"><label class="screen-reader-text" for="cb-select-all-1">Select All</label><input id="cb-select-all-1" type="checkbox"></td>
-<?php
-	foreach ( $orderby_columns as $this_key=>$this_column ) {
-		echo '<th scope="col" id="' . $this_key . '" class="manage-column column-' . $this_key . '><span>' . $this_column . '</span></th>';
-	}
-?>
-</thead>
-<tbody>
-<tr>
-<th scope="row" class="check-column">
-	<label class="screen-reader-text" for="cb-select-10215">Select Page</label>
-	<div class="locked-indicator">
-		<span class="locked-indicator-icon" aria-hidden="true"></span>
-		<span class="screen-reader-text">“Data Release 11” is locked</span>
-	</div>
-</th>
-<td class="title column-title has-row-actions column-primary page-title" data-colname="Title">
-	<div class="locked-info"><span class="locked-avatar"></span> <span class="locked-text"></span></div>
-	<strong><a class="row-title" href="http://test.sdss.org/wp-admin/post.php?post=10215&amp;action=edit" aria-label="“Data Release 11” (Edit)">Data Release 11</a></strong>
-	<div class="row-actions">
-		<span class="edit"><a href="http://test.sdss.org/wp-admin/post.php?post=10215&amp;action=edit" aria-label="Edit “Data Release 11”">Edit</a> | </span>
-		<span class="view"><a href="http://test.sdss.org/dr11/" rel="permalink" aria-label="View “Data Release 11”">View</a></span>
-	</div>
-	<button type="button" class="toggle-row"><span class="screen-reader-text">Show more details</span></button>
-</td>
-	<th scope="col" id="reviewer" class="manage-column column-reviewer">Reviewer</th>
-	<th scope="col" id="status" class="manage-column column-status">Status</th>
-	<th scope="col" id="post-modified" class="manage-column column-post-modified sortable asc"><a href="http://test.sdss.org/wp-admin/edit.php?post_type=page&amp;orderby=date&amp;order=desc"><span>Last Revised</span><span class="sorting-indicator"></span></a></th>
-</tr>
-</tbody>
-</table>
-<div class="tablenav bottom">
-	<div class="alignleft actions bulkactions">
-		<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
-		<select name="action" id="bulk-action-selector-top">
-			<option value="-1">Bulk Actions</option>
-			<option value="edit" class="hide-if-no-js">Update Status</option>
-			</select>
-		<input type="submit" id="doaction" class="button action" value="Apply">
-	</div>
-	<div class="alignleft actions">
-		<label for="filter-by-status" class="screen-reader-text">Filter by Status</label>
-		<select name="m" id="filter-by-status">
-			<option selected="selected" value="any-status">Any Status</option>
-			<option value="not-started">Not Started</option>
-			<option value="in-progress">In Progress</option>
-			<option value="needs-review">Needs Review</option>
-			<option value="completed">Completed</option>
-			<option value="do-not-publish">Do not Publish</option>
-		</select>
-	</div>
-	<h2 class="screen-reader-text">Status Update list navigation</h2>
-	<div class="tablenav-pages">
-		<span class="displaying-num"># items</span>
-		<span class="pagination-links">
-			<span class="tablenav-pages-navspan" aria-hidden="true">«</span>
-			<span class="tablenav-pages-navspan" aria-hidden="true">‹</span>
-			<span class="paging-input"><label for="current-page-selector" class="screen-reader-text">Current Page</label><input class="current-page" id="current-page-selector" type="text" name="page" value="<?php echo $paged; ?>" size="2" aria-describedby="table-paging"><span class="tablenav-paging-text"> of <span class="total-pages">17</span></span></span>
-			<a class="next-page" href="http://test.sdss.org/wp-admin/admin.php?page=idies-status-overview&amp;paged=2"><span class="screen-reader-text">Next page</span><span aria-hidden="true">›</span></a>
-			<a class="last-page" href="http://test.sdss.org/wp-admin/admin.php?page=idies-status-overview&amp;paged=17"><span class="screen-reader-text">Last page</span><span aria-hidden="true">»</span></a>
-		</span>
-	</div>
-	<div class="view-switch"></div>
-	<br class="clear">
-</div>
-</form>
-<?php
-		echo '</div>';
-	}		
 
 	/**
 	// Import a CSV file with Page Status Updates
@@ -845,4 +701,48 @@
 		return $content  . $update;
 	}
 
+	/**
+	/* Show a custom column that can be shown the All Pages admin screen
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return void
+	 */	
+	function idies_page_column_content( $column_name, $post_id ) {
+		if ( $column_name == 'reviewer' ) {
+			$the_user = get_user_by(  'slug', get_post_meta( $post_id , "idies_update_reviewer" , true) );
+			echo $the_user->display_name;
+
+			} 
+		if ( $column_name == 'updatestatus' ) {
+			echo $this->statuses[get_post_meta( $post_id , "idies_update_status" , true)];
+			//get_post_meta( $post_id , "idies_update_status" , true);
+			//$the_update_status = array_key_exists( $the_update_status , $this->statuses ) ?  $this->statuses['$the_update_statuses'] : '' ;
+		}
+	}
+
+	/**
+	/* Provides column name and header text for custom colums shown on All Pages
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return void
+	 */	
+	function idies_custom_pages_columns( $columns ) {
+
+		/** Add a Thumbnail Column **/
+		$myCustomColumns = array(
+			'reviewer' => __( 'Reviewer' ),
+			'updatestatus' => __( 'Update Status' )
+		);
+		$columns = array_merge( $columns, $myCustomColumns );
+
+		/** Remove Comments Columns **/
+		unset(
+			$columns['comments']
+		);
+
+		return $columns;
+	}
+	
 }
