@@ -112,7 +112,7 @@
 	 */	
 	public function __construct() {
 		
-		//register_activation_hook( __FILE__, '$this->activate' );
+		register_activation_hook( __FILE__, '$this->activate' );
 		//register_deactivation_hook( __FILE__, '$this->deactivate' );
 		
 		// Don't show on Prod/WWW
@@ -128,10 +128,10 @@
 		add_action( 'manage_pages_custom_column', array( $this , 'idies_page_column_content' ) , 10 , 2 );
 		add_filter( 'manage_pages_columns', array( $this , 'idies_custom_pages_columns' ) );
 		add_filter( 'manage_edit-page_sortable_columns', array( $this , 'idies_sortable_pages_column' ) );
+		add_action( 'pre_get_posts',array(  $this , 'idies_custom_columns_column_orderby' ) );
 		add_action( 'quick_edit_custom_box', array( $this , 'idies_display_quickedit_custom') , 10, 2 );
 		add_action( 'save_post', array(  $this , 'idies_save_quickedit_custom' ) );
 		add_action( 'admin_enqueue_scripts', array(  $this , 'idies_admin_enqueue_scripts' ) );
-		
 		
 		// ? add_action( 'manage_pages_custom_column' , array( 'custom_book_column' ), 10, 2 );
 
@@ -155,7 +155,6 @@
 		//UPDATE DEPENDING ON WEBSITE
 		$this->tmpurl = '/wp-tmp/';
 			
-			
 		$this->statuses = array(
 			"not-started"=>"Not Started",
 			"in-progress"=>"In Progress",
@@ -171,7 +170,42 @@
 			'completed' => 'panel-success',
 			'do-not-publish' => 'panel-default',
 		);
+		
+		/*
+		$this->all_pages = $this->get_page_updates();
+		foreach ( $this->all_pages as $thispage ){		
+			update_post_meta( $thispage->ID  , 'idies_update_status' , 'not-started' ) ;
+		}
+		*/
 	}
+	
+	/**
+	/* Activate Plugin, initialize/check all pages.
+	/* 
+	 * @since  1.2
+	 * @access public
+	 * @return void
+	 */	
+	function activate() {
+
+		$this->all_pages = $this->get_page_updates();
+		
+		if ( ! get_user_by( 'slug', $this->default_reviewer ) ) {
+			$the_user = get_users( array('role'=>'edit_theme_options', 'number'=>1 , 'orderby'=>'ID' ) );
+			$this->default_reviewer = $the_user->user_nicename;
+		}
+
+		foreach ( $this->all_pages as $thispage ){
+		
+			if ( ! array_key_exists( get_post_meta( $thispage->ID , "idies_update_status" , true ) , $this->statuses ) )
+				update_post_meta( $thispage->ID  , 'idies_update_status' , $this->default_status ) ;
+
+			if ( ! get_user_by( 'slug', get_post_meta( $thispage->ID , "idies_update_reviewer" , true ) ) ) { 
+				update_post_meta( $thispage->ID  , 'idies_update_reviewer' , $this->default_reviewer ) ;
+			}
+		}
+	}
+	
 	/**
 	/* Create the Status Update Dashboard Menus
 	/* 
@@ -204,7 +238,7 @@
 		// PAGES
 		$this->all_pages = $this->get_page_updates();
 		
-		$this->default_tmppath = get_option( 'idies_default_tmppath' , $this->default_tmppath );
+		$this->default_tmppath = get_option( 'idies_default_tmppath', $this->default_tmppath );
 		$this->default_reviewer = get_option( 'idies_default_reviewer' , $this->default_reviewer );
 		$this->default_status = get_option( 'idies_default_status' , $this->default_status );
 
@@ -232,8 +266,12 @@
 				case 'update' :
 				
 					if ( isset( $_POST[ 'default_tmppath' ] ) ) {
-						$this->default_tmppath = trailingslashit( $_POST[ 'default_tmppath' ] );
-						update_option( 'idies_default_tmppath' , $this->default_tmppath );
+						if ( !current_user_can( 'edit_theme_options' ) ) {
+							echo 'You do not have sufficient permissions to use the nuclear option.';
+						} else {
+							$this->default_tmppath = trailingslashit( $_POST[ 'default_tmppath' ] );
+							update_option( 'idies_default_tmppath' , $this->default_tmppath );
+						}
 					}
 					
 					if ( isset( $_POST[ 'default_reviewer' ] ) ) {
@@ -511,8 +549,8 @@
 				$thispage->ID . $sep . 
 				$quo . $thispage->post_title . $quo . $sep . 
 				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
-				$quo . site_url( "/" . $thispage->post_name . "/" ) . $quo . $sep .  
-				$quo . $this->statuses[get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
+				$quo . get_the_permalink( $thispage->ID ) . $quo . $sep .  
+				$quo . $this->statuses[ get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
 				$quo . $thispage->post_modified . $quo . "\n";
@@ -740,9 +778,10 @@
 		);
 		$columns = array_merge( $columns, $myCustomColumns );
 
-		/** Remove Comments Columns **/
+		/** Remove Columns **/
 		unset(
-			$columns['comments']
+			$columns['comments'],
+			$columns['post_type']
 		);
 
 		return $columns;
@@ -756,6 +795,7 @@
 	 * @return void
 	 */	
 	function idies_sortable_pages_column( $columns ) {
+	
 		$columns['update_reviewer'] = 'reviewer';
 		$columns['update_status'] = 'update_status';
 	 
@@ -764,6 +804,28 @@
 	 
 		return $columns;
 	}
+	
+	/**
+	/* Adds custom fields to Quick Edit box on All Pages screen
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return void
+	 */	
+	function idies_custom_columns_column_orderby( $query ) {
+	 
+		$orderby = $query->get( 'orderby');
+	 
+		if( 'reviewer' == $orderby ) {
+			$query->set('meta_key','idies_update_reviewer');
+			$query->set('orderby','meta_value');
+		}
+	 
+		if( 'update_status' == $orderby ) {
+			$query->set('meta_key','idies_update_status');
+			$query->set('orderby','meta_value');
+		}
+	}		
 	
 	/**
 	/* Adds custom fields to Quick Edit box on All Pages screen
