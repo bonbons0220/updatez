@@ -1,23 +1,23 @@
 <?php 
 /**
- * IDIES Content Tracker WordPress plug-in tracks update status of pages.
+ * Updatez WordPress plug-in tracks update status of pages.
  *
- * Tracks the assigned reviewer, status, and comments for each page that is 
+ * Tracks the assigned updater, status, and comments for each page that is 
  * published, private, or in draft on the website.
  *
- * @link git@bitbucket.org:idies/idies-update-tracker.git
+ * @link https://github.com/bonbons0220/updatez
  *
- * @package IDIES Content Tracker
- * @subpackage idies_content_tracker main class
- * @since 1.0.0 (when the file was introduced)
+ * @package Updatez
+ * @subpackage updatez main class
+ * @since 1.2 (when the file was introduced)
  */
 
 /**
- * idies_content_tracker Main Class definition
+ * updatez Main Class definition
  *
- * @since 1.0.0
+ * @since 1.2.0
  */
- class idies_content_tracker {
+ class updatez {
 
 	/**
 	 * Array of Page Status values.
@@ -41,11 +41,11 @@
 	public $all_pages;
 	
 	/**
-	 * Default page reviewer.
+	 * Default page updater.
 	 *
 	 * @var    string
 	 */
-	public $default_reviewer;
+	public $default_updater;
 	
 	/**
 	 * Default page status.
@@ -121,22 +121,20 @@
 		}
 			
 		// filters and actions
-		add_filter( 'the_content', array($this , 'showstatus' ) );
-		add_action( 'admin_menu', array( $this , 'create_admin_menu' ) );
-		add_action( 'add_meta_boxes_page', array( $this , 'idies_update_meta_box_page' ) );		
-		add_action('save_post', array( $this , 'idies_update_save_meta' ) );
-		add_action( 'manage_pages_custom_column', array( $this , 'idies_page_column_content' ) , 10 , 2 );
-		add_filter( 'manage_pages_columns', array( $this , 'idies_custom_pages_columns' ) );
-		add_filter( 'manage_edit-page_sortable_columns', array( $this , 'idies_sortable_pages_column' ) );
-		add_action( 'pre_get_posts',array(  $this , 'idies_custom_columns_column_orderby' ) );
-		add_action( 'quick_edit_custom_box', array( $this , 'idies_display_quickedit_custom') , 10, 2 );
-		add_action( 'save_post', array(  $this , 'idies_save_quickedit_custom' ) );
-		add_action( 'admin_enqueue_scripts', array(  $this , 'idies_admin_enqueue_scripts' ) );
+		add_filter( 'the_content' , array($this , 'showstatus' ) );
+		add_action( 'admin_menu' , array( $this , 'create_admin_menu' ) );
+		add_action( 'add_meta_boxes_page' , array( $this , 'updatez_meta_box_page' ) );		
+		add_action( 'save_post' , array( $this , 'updatez_save_meta' ) );
+		add_action( 'manage_pages_custom_column' , array( $this , 'idies_page_column_content' ) , 10 , 2 );
+		add_filter( 'manage_pages_columns' , array( $this , 'idies_custom_pages_columns' ) );
+		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'idies_sortable_pages_column' ) );
+		add_action( 'pre_get_posts' ,array(  $this , 'idies_custom_columns_column_orderby' ) );
+		add_action( 'quick_edit_custom_box' , array( $this , 'idies_display_quickedit_custom') , 10, 2 );
+		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
+		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
 		
-		// ? add_action( 'manage_pages_custom_column' , array( 'custom_book_column' ), 10, 2 );
-
 		// Set up Variables
-		$this->default_reviewer = 'bsouter';
+		$this->default_updater = 'bsouter';
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
 		$this->post_status  = 'publish,private,draft';
@@ -148,11 +146,11 @@
 			"Edit",
 			"View",
 			"Status",
-			"Reviewer",
+			"Updater",
 			"Comment",
 			"Last Revised" );
 
-		//UPDATE DEPENDING ON WEBSITE
+		// TEMP FILE LOCATION
 		$this->tmpurl = '/wp-tmp/';
 			
 		$this->statuses = array(
@@ -164,17 +162,17 @@
 		);
 		
 		$this->panel_class = array(
-			'not-started' => 'panel-danger',
-			'in-progress' => 'panel-warning',
-			'needs-review' => 'panel-info',
-			'completed' => 'panel-success',
-			'do-not-publish' => 'panel-default',
+			'not-started' => 'panel-danger' ,
+			'in-progress' => 'panel-warning' ,
+			'needs-review' => 'panel-info' ,
+			'completed' => 'panel-success' ,
+			'do-not-publish' => 'panel-default' ,
 		);
 		
 		/*
 		$this->all_pages = $this->get_page_updates();
 		foreach ( $this->all_pages as $thispage ){		
-			update_post_meta( $thispage->ID  , 'idies_update_status' , 'not-started' ) ;
+			update_post_meta( $thispage->ID  , 'updatez_status' , 'not-started' ) ;
 		}
 		*/
 	}
@@ -190,18 +188,18 @@
 
 		$this->all_pages = $this->get_page_updates();
 		
-		if ( ! get_user_by( 'slug', $this->default_reviewer ) ) {
-			$the_user = get_users( array('role'=>'edit_theme_options', 'number'=>1 , 'orderby'=>'ID' ) );
-			$this->default_reviewer = $the_user->user_nicename;
+		if ( ! get_user_by( 'slug' , $this->default_updater ) ) {
+			$the_user = get_users( array('role'=>'edit_theme_options' , 'number'=>1 , 'orderby'=>'ID' ) );
+			$this->default_updater = $the_user->user_nicename;
 		}
 
 		foreach ( $this->all_pages as $thispage ){
 		
-			if ( ! array_key_exists( get_post_meta( $thispage->ID , "idies_update_status" , true ) , $this->statuses ) )
-				update_post_meta( $thispage->ID  , 'idies_update_status' , $this->default_status ) ;
+			if ( ! array_key_exists( get_post_meta( $thispage->ID , "updatez_status" , true ) , $this->statuses ) )
+				update_post_meta( $thispage->ID  , 'updatez_status' , $this->default_status ) ;
 
-			if ( ! get_user_by( 'slug', get_post_meta( $thispage->ID , "idies_update_reviewer" , true ) ) ) { 
-				update_post_meta( $thispage->ID  , 'idies_update_reviewer' , $this->default_reviewer ) ;
+			if ( ! get_user_by( 'slug' , get_post_meta( $thispage->ID , "updatez_updater" , true ) ) ) { 
+				update_post_meta( $thispage->ID  , 'updatez_updater' , $this->default_updater ) ;
 			}
 		}
 	}
@@ -216,7 +214,7 @@
 	function create_admin_menu() {
 		
 		// Create the top level admin menu item
-		add_menu_page( 'Status Updates' , 'Status Updates', 'edit_posts', 'idies-status-menu' , array( $this , 'show_settings_page' ) ); 
+		add_menu_page( 'Status Updates' , 'Status Updates' , 'edit_posts' , 'idies-status-menu' , array( $this , 'show_settings_page' ) ); 
 		
 	}
 
@@ -231,16 +229,16 @@
 		
 		$result = array();
 		
-		if ( !current_user_can( 'edit_posts' ) )  {
+		if ( !current_user_can( 'edit_theme_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 
 		// PAGES
 		$this->all_pages = $this->get_page_updates();
 		
-		$this->default_tmppath = get_option( 'idies_default_tmppath', $this->default_tmppath );
-		$this->default_reviewer = get_option( 'idies_default_reviewer' , $this->default_reviewer );
-		$this->default_status = get_option( 'idies_default_status' , $this->default_status );
+		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
+		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
+		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
 
 		// Get Action
 		$the_action = ( isset( $_POST['update'] ) ? 'update' :
@@ -250,38 +248,30 @@
 					
 		if ( ( $the_action ) && ( ! empty( $_POST ) ) ) {
 	
-			check_admin_referer( 'save_settings_action', 'save_settings_nonce' );
+			check_admin_referer( 'save_settings_action' , 'save_settings_nonce' );
 		
 			switch ($the_action) {
 				case 'import' :
 					$result = $this->import();
 				break;
 				case 'nuclear' :
-					if ( !current_user_can( 'edit_theme_options' ) ) {
-						echo 'You do not have sufficient permissions to use the nuclear option.';
-					} else {
-						$this->nuclear(  );
-					}
+					$this->nuclear(  );
 				break;
 				case 'update' :
 				
 					if ( isset( $_POST[ 'default_tmppath' ] ) ) {
-						if ( !current_user_can( 'edit_theme_options' ) ) {
-							echo 'You do not have sufficient permissions to use the nuclear option.';
-						} else {
-							$this->default_tmppath = trailingslashit( $_POST[ 'default_tmppath' ] );
-							update_option( 'idies_default_tmppath' , $this->default_tmppath );
-						}
+						$this->default_tmppath = trailingslashit( $_POST[ 'default_tmppath' ] );
+						update_option( 'updatez_default_tmppath' , $this->default_tmppath );
 					}
 					
-					if ( isset( $_POST[ 'default_reviewer' ] ) ) {
-						$this->default_reviewer = sanitize_user( $_POST[ 'default_reviewer' ] );
-						update_option( 'idies_default_reviewer' , $this->default_reviewer );
+					if ( isset( $_POST[ 'default_updater' ] ) ) {
+						$this->default_updater = sanitize_user( $_POST[ 'default_updater' ] );
+						update_option( 'updatez_default_updater' , $this->default_updater );
 					}
 					
 					if ( isset( $_POST[ 'default_status' ] ) ) {
 						$this->default_status = sanitize_text_field( $_POST[ 'default_status' ] );
-						update_option( 'idies_default_status' , $this->default_status );
+						update_option( 'updatez_default_status' , $this->default_status );
 					}
 					
 				break;
@@ -293,13 +283,13 @@
 		
 		// More info
 		$update_args = array( 
-			'meta_key' => 'idies_update_status',
-			'meta_compare' => 'NOT EXISTS', 
+			'meta_key' => 'updatez_status' ,
+			'meta_compare' => 'NOT EXISTS' , 
 			'meta_value' => 'foobar' ,
 		);
 		$updated_pages = $this->get_page_updates( $update_args );
 		$completed_args = array( 
-			'meta_key' => 'idies_update_status',
+			'meta_key' => 'updatez_status' ,
 			'meta_value' => 'completed' ,
 		);
 		$completed_pages = $this->get_page_updates( $completed_args );
@@ -329,11 +319,11 @@
 		echo '</tr>';
 
 		echo '<tr>';
-		echo '<th scope="row">Default Reviewer</th>';
+		echo '<th scope="row">Default Updater</th>';
 		echo '<td>';
-		echo '<select name="default_reviewer" id="default-reviewer">';
+		echo '<select name="default_updater" id="default-updater">';
 		foreach ( $this->all_users as $thisuser ) {
-			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $this->default_reviewer , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
+			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $this->default_updater , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
 		}
 		echo '</select>';
 		echo '</td>';
@@ -376,7 +366,7 @@
 		echo '<tr>';
 		echo '<th scope="row">Export Page Updates as CSV...</th>';
 		echo '<td><a class="button button-secondary" href="' . $this->tmpurl . $this->export_fname . '">Export</a></td>';
-		echo '<td><em>Export to CSV file to update Status, Reviewer, and Comments of multiple pages manually.</em></td>';
+		echo '<td><em>Export to CSV file to update Status, Updater, and Comments of multiple pages manually.</em></td>';
 		echo '</tr>';
 
 		echo '<tr>';
@@ -385,10 +375,10 @@
 		echo '</tr>';
 		echo '<tr>';
 		echo '<td><button type="submit" class="button button-primary" id="import" name="import" value="import">Import</button></td>';
-		echo '<td scope="row"><em>N.b. you can only update the <strong>Reviewer</strong>, <strong>Status</strong>, ' . 
+		echo '<td scope="row"><em>N.b. you can only update the <strong>Updater</strong>, <strong>Status</strong>, ' . 
 			 'and/or <strong>Comments</strong> with CSV import. All other columns are ignored (but ' .
 			 'column titles and order must match CSV Export file). ' .
-			 'Also, the <strong>Reviewer</strong> must be a WordPress login for a valid user ' .
+			 'Also, the <strong>Updater</strong> must be a WordPress login for a valid user ' .
 			 '(e.g. bsouter), not a display name (e.g. Bonnie Souter). You can find users\' login ' . 
 			 'names on <a href="/wp-admin/users.php">All Users</a>.</em></td>';
 		echo '</tr>';
@@ -396,7 +386,7 @@
 		echo '<tr>';
 		echo '<th scope="row">Nuclear Option: <br></th>';
 		echo '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Go Nuclear</button></td>';
-		echo '<td><em>Reset all pages\' to default status, reviewer, and delete comments.</em></td>';
+		echo '<td><em>Reset all pages\' to default status, updater, and delete comments.</em></td>';
 		echo '</tr>';
 
 		echo '</tbody>';
@@ -438,8 +428,8 @@
 						) ) ) ?  
 					$_GET[ 'order' ] : 
 					'asc' ;
-		$reviewer  = isset( $_GET[ 'reviewer' ] ) ?										// Show pages assigned to 'all'. 
-					sanitize_text_field( $_GET[ 'reviewer' ] ) : 
+		$updater  = isset( $_GET[ 'updater' ] ) ?										// Show pages assigned to 'all'. 
+					sanitize_text_field( $_GET[ 'updater' ] ) : 
 					'all' ;
 		$number  = isset( $_GET[ 'number' ] ) ? 										// number to show: 20
 					absint( $_GET[ 'number' ] ) : 
@@ -494,7 +484,7 @@
 		$this_csv = str_getcsv( $this_line ) ;
 			
 			// Validate input
-			if ( get_user_by( 'slug', $this_csv[5] ) === false ) {
+			if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
 				$error .= "Error. User not found: " . $this_csv[5] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
 				continue;
 			} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
@@ -502,9 +492,9 @@
 				continue;
 			}			
 			
-			update_post_meta( $this_csv[0]  , 'idies_update_reviewer' , $this_csv[5] ) ;
-			update_post_meta( $this_csv[0]  , 'idies_update_status' , $this_key ) ;
-			update_post_meta( $this_csv[0]  , 'idies_update_comment' , $this_csv[6] ) ;
+			update_post_meta( $this_csv[0]  , 'updatez_updater' , $this_csv[5] ) ;
+			update_post_meta( $this_csv[0]  , 'updatez_status' , $this_key ) ;
+			update_post_meta( $this_csv[0]  , 'updatez_comment' , $this_csv[6] ) ;
 		}
 
 		if ( strlen($error) == 0 ) $status = "success";
@@ -522,27 +512,11 @@
 	function write_export_data(  ) {
 
 		$output = '';
-		$sep = ',';
+		$sep = ' ,';
 		$quo = '"';
 
-		//header to be downloaded and saved locally
-		//$output .= "header('Content-Disposition: attachment; filename=' . $this->export_fname)" . "\n";
-		//$output .= "header('Content-Type: text/plain')" . "\n";
-		
-		//ID, post_title, post.php?post=ID&action=edit, /post_name/, idies_update_status, idies_update_reviewer, idies_update_comment, post_modified
+		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
 		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
-		
-		/* 
-		$output .= 
-			$quo . "ID" . $quo . $sep . 
-			$quo . "Title" . $quo . $sep .
-			$quo . "Edit" . $quo . $sep .
-			$quo . "View" . $quo . $sep .
-			$quo . "Status" . $quo . $sep .
-			$quo . "Reviewer" . $quo . $sep .
-			$quo . "Comment" . $quo . $sep .
-			$quo . "Last Revised" . $quo . "\n";
-		*/
 			
 		foreach ( $this->all_pages as $thispage ){
 			$output .= 
@@ -550,9 +524,9 @@
 				$quo . $thispage->post_title . $quo . $sep . 
 				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
 				$quo . get_the_permalink( $thispage->ID ) . $quo . $sep .  
-				$quo . $this->statuses[ get_post_meta( $thispage->ID, "idies_update_status" , true )] . $quo . $sep . 
-				$quo . get_post_meta( $thispage->ID, "idies_update_reviewer" , true ) . $quo . $sep . 
-				$quo . get_post_meta( $thispage->ID, "idies_update_comment" , true ) . $quo . $sep . 
+				$quo . $this->statuses[ get_post_meta( $thispage->ID, "updatez_status" , true )] . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "updatez_updater" , true ) . $quo . $sep . 
+				$quo . get_post_meta( $thispage->ID, "updatez_comment" , true ) . $quo . $sep . 
 				$quo . $thispage->post_modified . $quo . "\n";
 		}
 		
@@ -564,7 +538,7 @@
 	}		
 
 	/**
-	/* Nuclear option to reset Page reviewer, status, and comments to defaults
+	/* Nuclear option to reset Page updater, status, and comments to defaults
 	/* 
 	 * @since  1.1
 	 * @access public
@@ -573,9 +547,9 @@
 	function nuclear() {
 		
 		foreach ( $this->all_pages as $thispage ){
-			update_post_meta( $thispage->ID , 'idies_update_status' , $this->default_status ) ;
-			update_post_meta( $thispage->ID , 'idies_update_reviewer' , $this->default_reviewer ) ;
-			update_post_meta( $thispage->ID , 'idies_update_comment' , '' ) ;
+			update_post_meta( $thispage->ID , 'updatez_status' , $this->default_status ) ;
+			update_post_meta( $thispage->ID , 'updatez_updater' , $this->default_updater ) ;
+			update_post_meta( $thispage->ID , 'updatez_comment' , '' ) ;
 		}
 	
 	}		
@@ -588,30 +562,30 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_update_save_meta($post_id){	
+	function updatez_save_meta($post_id){	
 		
 		// Check nonce, user capabilities
 		if ( ! isset($_POST['save_postmeta_nonce']) ) return; //in case this is a different save_post action
-		check_admin_referer( 'save_postmeta_action', 'save_postmeta_nonce' );
+		check_admin_referer( 'save_postmeta_action' , 'save_postmeta_nonce' );
 
-		$newreviewer = isset( $_REQUEST['meta_box_reviewer'] ) ? sanitize_user($_REQUEST['meta_box_reviewer'] ) : false ;
+		$newupdater = isset( $_REQUEST['meta_box_updater'] ) ? sanitize_user($_REQUEST['meta_box_updater'] ) : false ;
 		$newstatus = isset( $_REQUEST['meta_box_status'] ) ? sanitize_title($_REQUEST['meta_box_status'])  : false ;
 		$newcomment = isset( $_REQUEST['meta_box_comment'] ) ? sanitize_text_field($_REQUEST['meta_box_comment']) : false ;
 		
 		// Anything to update?
-		if ( !( $newreviewer || $newstatus || $newcomment ) ) {
+		if ( !( $newupdater || $newstatus || $newcomment ) ) {
 			return $post_id;
 		}
 
 		if ( ! current_user_can( 'edit_posts' ) && ! wp_is_post_autosave( $post_id ) ) return $post_id;
 		
-		if ( $newreviewer && get_user_by( 'slug', $newreviewer ) ) {
+		if ( $newupdater && get_user_by( 'slug' , $newupdater ) ) {
 		
 			//update the post meta
 			update_post_meta(
 				$post_id,
-				'idies_update_reviewer',
-				$newreviewer
+				'updatez_updater' ,
+				$newupdater
 			);
 		}
 		
@@ -620,7 +594,7 @@
 			//update the post meta
 			update_post_meta(
 				$post_id,
-				'idies_update_status',
+				'updatez_status' ,
 				$newstatus
 			);
 		}
@@ -630,7 +604,7 @@
 			//update the post meta
 			update_post_meta(
 				$post_id,
-				'idies_update_comment',
+				'updatez_comment' ,
 				$newcomment
 			);
 		}
@@ -643,13 +617,13 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_update_meta_box_page( $page ){
+	function updatez_meta_box_page( $page ){
 		add_meta_box( 
-			'idies-update-meta-box-page', 
+			'idies-update-meta-box-page' , 
 			__( 'Status Update' ), 
 			array( $this , 'render_update_meta_box' ), 
-			'page', 
-			'normal', 
+			'page' , 
+			'normal' , 
 			'default'
 		);
 	}
@@ -664,10 +638,10 @@
 	function render_update_meta_box( $page ) {
 		$values = get_post_custom( $page->ID );
 		
-		$reviewer = isset( $values['idies_update_reviewer'] ) ? esc_attr( $values['idies_update_reviewer'][0] ) : $this->default_reviewer ;
-		$status = isset( $values['idies_update_status'] ) ? esc_attr( $values['idies_update_status'][0] ) : $this->default_status ;
-		$comment = isset( $values['idies_update_comment'] ) ? esc_attr( $values['idies_update_comment'][0] ) : '' ;
-		wp_nonce_field( 'save_postmeta_action', 'save_postmeta_nonce' );
+		$updater = isset( $values['updatez_updater'] ) ? esc_attr( $values['updatez_updater'][0] ) : $this->default_updater ;
+		$status = isset( $values['updatez_status'] ) ? esc_attr( $values['updatez_status'][0] ) : $this->default_status ;
+		$comment = isset( $values['updatez_comment'] ) ? esc_attr( $values['updatez_comment'][0] ) : '' ;
+		wp_nonce_field( 'save_postmeta_action' , 'save_postmeta_nonce' );
 	?>
 	<table class="form-table meta-box">
 	<tr>
@@ -681,11 +655,11 @@
 	?></td>
 	</tr>
 	<tr>
-	<th scope="row"><label for="meta_box_reviewer">Reviewer</label></th>
+	<th scope="row"><label for="meta_box_updater">Updater</label></th>
     <td><?php
-		echo '<select  class="postbox" name="meta_box_reviewer" id="meta-box-reviewer">';
+		echo '<select  class="postbox" name="meta_box_updater" id="meta-box-updater">';
 		foreach ( $this->all_users as $thisuser ) {
-			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $reviewer , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
+			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $updater , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
 		}
 		echo '</select>';
 	?></td>
@@ -709,16 +683,16 @@
 	 */	
 	function showstatus( $content ) {
 	
-		$append = '';
-		
 		// Status is only shown on dev devng test and testng.
 		if ( 'development' !== WP_ENV) return $content;
 		
+		$append = '';
+		
 		// No status - no show
-		$status = get_post_meta( get_the_ID() , 'idies_update_status', true );
+		$status = get_post_meta( get_the_ID() , 'updatez_status' , true );
 		if ( empty( $status ) ) return $content;
-		$reviewer = get_post_meta( get_the_ID() , 'idies_update_reviewer', true );
-		$comments = get_post_meta( get_the_ID() , 'idies_update_comment', true );
+		$updater = get_post_meta( get_the_ID() , 'updatez_updater' , true );
+		$comments = get_post_meta( get_the_ID() , 'updatez_comment' , true );
 		
 		//if ( array_key_exists ( $status , $this->panel_class ) ) $class = $this->panel_class->$status;
 		$class='panel-danger';
@@ -726,7 +700,7 @@
 		$update = '<div class="panel ' . $this->panel_class[$status] . '">';
 		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
 		$update .= '<div class="panel-body">';
-		$update .= "Reviewer: " . $reviewer . "<br>\n";
+		$update .= "Updater: " . $updater . "<br>\n";
 		$update .= "Comments: " . $comments;
 		$update .= '</div></div>';
 		
@@ -742,19 +716,19 @@
 	 */	
 	function idies_page_column_content( $column_name, $post_id ) {
 	
-		if ( $column_name == 'update_reviewer' ) {
-			$the_user = get_user_by(  'slug', get_post_meta( $post_id , "idies_update_reviewer" , true) );
+		if ( $column_name == 'update_updater' ) {
+			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
 			echo $the_user->display_name . "<span class='lookup hidden'>$the_user->user_nicename</span>";
 			} 
 		if ( $column_name == 'update_status' ) {
-			$the_status = get_post_meta( $post_id , "idies_update_status" , true) ;
-			$the_user = get_user_by(  'slug', get_post_meta( $post_id , "idies_update_reviewer" , true) );
+			$the_status = get_post_meta( $post_id , "updatez_status" , true) ;
+			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
 			echo $this->statuses[ $the_status ] . "<span class='lookup hidden'>$the_status</span>";
 			if ( in_array( $the_status , array( "completed" , "do-not-publish" ) ) == false ) {
 				echo " <a class='button' href='mailto:$the_user->user_email" . "?subject=SDSS Website Update Reminder" . 
 				"&body=Hello, " . $the_user->display_name . ". \n" . 
-				"You are the reviewer for \"" . get_the_title( $post_id ) . "\" (" . get_the_permalink( $post_id ) . "). " . 
-				"This page is \"" . $this->statuses[ get_post_meta( $post_id , "idies_update_status" , true) ] . "\". " . 
+				"You are the updater for \"" . get_the_title( $post_id ) . "\" (" . get_the_permalink( $post_id ) . "). " . 
+				"This page is \"" . $this->statuses[ get_post_meta( $post_id , "updatez_status" , true) ] . "\". " . 
 				"Please complete any required updates and mark the Update Status as \"Completed\". \n" .
 				"Thanks!" .
 				"'><strong>Send Update Reminder</strong></a>";
@@ -773,7 +747,7 @@
 
 		/** Add a Thumbnail Column **/
 		$myCustomColumns = array(
-			'update_reviewer' => __( 'Reviewer' ),
+			'update_updater' => __( 'Updater' ),
 			'update_status' => __( 'Update Status' )
 		);
 		$columns = array_merge( $columns, $myCustomColumns );
@@ -796,7 +770,7 @@
 	 */	
 	function idies_sortable_pages_column( $columns ) {
 	
-		$columns['update_reviewer'] = 'reviewer';
+		$columns['update_updater'] = 'updater';
 		$columns['update_status'] = 'update_status';
 	 
 		//To make a column 'un-sortable' remove it from the array
@@ -816,14 +790,14 @@
 	 
 		$orderby = $query->get( 'orderby');
 	 
-		if( 'reviewer' == $orderby ) {
-			$query->set('meta_key','idies_update_reviewer');
-			$query->set('orderby','meta_value');
+		if( 'updater' == $orderby ) {
+			$query->set('meta_key' ,'updatez_updater');
+			$query->set('orderby' ,'meta_value');
 		}
 	 
 		if( 'update_status' == $orderby ) {
-			$query->set('meta_key','idies_update_status');
-			$query->set('orderby','meta_value');
+			$query->set('meta_key' ,'updatez_status');
+			$query->set('orderby' ,'meta_value');
 		}
 	}		
 	
@@ -839,7 +813,7 @@
 		static $printNonce = TRUE;
 		if ( $printNonce ) {
 			$printNonce = FALSE;
-			wp_nonce_field( 'save_quickedit_action', 'save_quickedit_nonce' );
+			wp_nonce_field( 'save_quickedit_action' , 'save_quickedit_nonce' );
 		}
 
 		?>
@@ -848,10 +822,10 @@
 			<label class="inline-edit-group">
 			<?php 
 			switch ( $column_name ) {
-				case 'update_reviewer':
-					echo '<span class="title">Update Reviewer</span><select name="update_reviewer" />';
+				case 'update_updater':
+					echo '<span class="title">Update Updater</span><select name="update_updater" />';
 					foreach ( $this->all_users as $thisuser ) {
-						//echo '<option value="' . $thisuser->user_nicename . '"' . selected( $update_reviewer , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
+						//echo '<option value="' . $thisuser->user_nicename . '"' . selected( $update_updater , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
 						echo '<option value="' . $thisuser->user_nicename . '"/>' . $thisuser->display_name . '</option>';
 					}
 					echo '</select>';
@@ -882,22 +856,21 @@
 	function idies_save_quickedit_custom( $post_id ) {
 
 		if ( ! isset($_POST['save_quickedit_nonce']) ) return; //in case this is a different save_post action
-		check_admin_referer( 'save_quickedit_action', 'save_quickedit_nonce' );
-		//if ( ! wp_verify_nonce( 'save_quickedit_nonce' , 'save_quickedit_action' ) ) return;
+		check_admin_referer( 'save_quickedit_action' , 'save_quickedit_nonce' );
 		
 		if ( $this->post_type !== $_POST['post_type'] ) {
 			return;
 		}
-		if ( !current_user_can( 'edit_posts', $post_id ) ) {
+		if ( !current_user_can( 'edit_posts' , $post_id ) ) {
 			return;
 		}
 		
 		
-		if ( isset( $_REQUEST['update_reviewer'] ) ) {
-			update_post_meta( $post_id, 'idies_update_reviewer', $_REQUEST['update_reviewer'] );
+		if ( isset( $_REQUEST['update_updater'] ) ) {
+			update_post_meta( $post_id, 'updatez_updater' , $_REQUEST['update_updater'] );
 		}
 		if ( isset( $_REQUEST['update_status'] ) ) {
-			update_post_meta( $post_id, 'idies_update_status', $_REQUEST['update_status'] );
+			update_post_meta( $post_id, 'updatez_status' , $_REQUEST['update_status'] );
 		}
 	}
 
@@ -908,16 +881,14 @@
 	 * @access public
 	 * @return void
 	 */	
-	//if ( ! function_exists('wp_my_admin_enqueue_scripts') ):
 	function idies_admin_enqueue_scripts( $hook ) {
 
 		if ( 'edit.php' === $hook &&
 			isset( $_GET['post_type'] ) && $this->post_type === $_GET['post_type'] ) {
-				wp_enqueue_script( 'idies_admin_script', ICT_DIR_URL . 'js/admin_edit.js' ,
+				wp_enqueue_script( 'idies_admin_script' , ICT_DIR_URL . 'js/admin_edit.js' ,
 					false, null, true );
 		}
 	}
-	//endif;
 	
 }
 ?>

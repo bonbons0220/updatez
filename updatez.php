@@ -1,14 +1,14 @@
 <?php
 /*
-Plugin Name: IDIES Content Tracker
-Plugin URI: http://idies.jhu.edu
+Plugin Name: Updatez
+Plugin URI: https://github.com/bonbons0220/updatez
 Description: Tracks content updates. Requires WCK Pro Version to work.
 Version: 1.2
 Author: Bonnie Souter
-Author URI: http://idies.jhu.edu
+Author URI: http://zendgame.com
 License: GPLv2
 
-Copyright 2015 Bonnie Souter  (email : bsouter@jhu.edu)
+Copyright 2015 Bonnie Souter  (email : bonbons0220@gmail.com)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,14 +28,14 @@ Copyright 2015 Bonnie Souter  (email : bsouter@jhu.edu)
 // Only allow this script to be run within WordPress
 defined('ABSPATH') or die("Unknown Access Error");
 
-if ( defined( 'ICT_PASSWORD_VERSION' ) ) die('IDIES Content Tracker vesion ' . ICT_PASSWORD_VERSION . ' already running.');
-define('ICT_PASSWORD_VERSION', '1.1');
+if ( defined( 'ICT_PASSWORD_VERSION' ) ) die('Updatez vesion ' . ICT_PASSWORD_VERSION . ' already running.');
+define('ICT_PASSWORD_VERSION', '1.2');
 
 define('ICT_DIR_PATH',plugin_dir_path( __FILE__ ));
 define('ICT_DIR_URL',plugin_dir_url( __FILE__ ));
 
 // load the class file
-require_once( ICT_DIR_PATH . 'lib/idies-content-tracker.php' );
-$idies_content_tracker = new idies_content_tracker();
+require_once( ICT_DIR_PATH . 'lib/updatez.php' );
+$updatez = new updatez();
 
 ?>
