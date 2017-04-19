@@ -475,8 +475,9 @@
 		$fields = str_getcsv( array_shift( $contents ) );
 		
 		// Check that the fields match
-		if ( !count( array_diff( $fields , $this->csv_fields ) ) == 0 ) 
-			return array( "error"=>"CSV file must contain the following column titles: " . implode(",",$this->csv_fields) );
+		if ( !count( array_diff( $fields , $this->csv_fields ) ) == 0 ) {
+			return array( "error"=>"CSV file must contain the following column titles: " . implode(",",$this->csv_fields) . " not " . implode(",",$fields) );
+		}
 
 		//loop through the csv and update all the files
 		$error = '' ; 
@@ -512,7 +513,7 @@
 	function write_export_data(  ) {
 
 		$output = '';
-		$sep = ' ,';
+		$sep = ',';
 		$quo = '"';
 
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
