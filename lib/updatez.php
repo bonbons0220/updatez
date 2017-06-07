@@ -104,6 +104,20 @@
 	public $csv_fields;
 	
 	/**
+	 * $_GET['updater']
+	 *
+	 * @var    string
+	 */	 
+	public $updater;
+	
+	/**
+	 * $_GET['statuz']
+	 *
+	 * @var    string
+	 */	 
+	public $statuz;
+	
+	/**
 	 * Public constructor method to prevent a new instance of the object.
 	 *
 	 * @since  1.0.0
@@ -133,11 +147,18 @@
 		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
 		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
 		
+		// Updatez All Pages filter options
+		add_filter( 'posts_where' , array($this , 'posts_where' ) );
+		add_action( 'restrict_manage_posts' , array($this , 'add_filter_options' ) );
+		add_filter( 'parse_query' , array($this , 'pages_filter_options_in_query' ) );
+
 		// Set up Variables
 		$this->default_updater = 'bsouter';
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
 		$this->post_status  = 'publish,private,draft';
+		$this->updater = "updater";
+		$this->statuz = "statuz";
 		
 		$this->all_users = get_users( 'orderby=nicename' );	
 		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
@@ -698,7 +719,8 @@
 		//if ( array_key_exists ( $status , $this->panel_class ) ) $class = $this->panel_class->$status;
 		$class='panel-danger';
 
-		$update = '<div class="panel ' . $this->panel_class[$status] . '">';
+		$update = '<div class="clearfix"></div>';
+		$update .= '<div class="panel ' . $this->panel_class[$status] . '">';
 		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
 		$update .= '<div class="panel-body">';
 		$update .= "Updater: " . $updater . "<br>\n";
@@ -719,12 +741,16 @@
 	
 		if ( $column_name == 'update_updater' ) {
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
+			echo "<a href='" . add_query_arg( $this->updater , $the_user->ID ) . "'>";
 			echo $the_user->display_name . "<span class='lookup hidden'>$the_user->user_nicename</span>";
+			echo "</a>";
 			} 
 		if ( $column_name == 'update_status' ) {
 			$the_status = get_post_meta( $post_id , "updatez_status" , true) ;
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
+			echo "<a href='" . add_query_arg( $this->statuz , $the_status ) . "'>";
 			echo $this->statuses[ $the_status ] . "<span class='lookup hidden'>$the_status</span>";
+			echo "</a>";
 			if ( in_array( $the_status , array( "completed" , "do-not-publish" ) ) == false ) {
 				echo " <a class='button' href='mailto:$the_user->user_email" . "?subject=SDSS Website Update Reminder" . 
 				"&body=Hello, " . $the_user->display_name . ". \n" . 
@@ -826,7 +852,6 @@
 				case 'update_updater':
 					echo '<span class="title">Update Updater</span><select name="update_updater" />';
 					foreach ( $this->all_users as $thisuser ) {
-						//echo '<option value="' . $thisuser->user_nicename . '"' . selected( $update_updater , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
 						echo '<option value="' . $thisuser->user_nicename . '"/>' . $thisuser->display_name . '</option>';
 					}
 					echo '</select>';
@@ -834,7 +859,6 @@
 				case 'update_status':
 					echo '<span class="title">Update Status</span><select name="update_status" />';
 					foreach ( $this->statuses as $thiskey=>$thisvalue ) {
-						//echo '<option value="' . $thiskey . '"' . selected( $update_status , $thiskey ) . '>' . $thisvalue . '</option>';
 						echo '<option value="' . $thiskey . '">' . $thisvalue . '</option>';
 					}
 					echo '</select>';
@@ -876,11 +900,103 @@
 	}
 
 	/**
-	/* Populates fields in Quick Edit box on All Pages screen
+	/* Applu Updatez filter to all posts query
 	/* 
-	 * @since  1.1
-	 * @access public
-	 * @return void
+	 */	
+	function posts_where( $where ) {
+		
+		$updater = $this->updater;
+		$statuz = $this->statuz;
+		
+		if( is_admin() ) {
+			global $wpdb;
+			
+			if ( isset( $_GET[$updater] ) && 
+				!empty( $_GET[$updater] ) ) {
+
+				if ( false !== $updater_info = get_userdata( intval( $_GET[$updater ] ) ) ) {
+					$where .= " and ID in " .
+						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '" . $updater_info->user_login . "' and post_id in " .
+						"(select post_id from sdsswp_dr14_test.wp_postmeta where meta_key='updatez_updater' ) )";
+				}
+			}
+			
+			if ( isset( $_GET['statuz'] ) && 
+				!empty( $_GET['statuz'] ) ) {
+				
+				$statuz = sanitize_title( $_GET['statuz'] );
+				$where .= " and ID in " .
+						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '$statuz' and post_id in " .
+						"(select post_id from sdsswp_dr14_test.wp_postmeta where meta_key='updatez_status' ) )";
+			}
+		}
+		return $where;
+	}	
+	
+	/**
+	/* Show Users dropdown for Filter OPtions on All Pages Admin Screen
+	/* 
+	 */	
+	function add_filter_options(  ) {
+
+		global $typenow;
+		$updater = $this->updater;
+		$statuz = $this->statuz;
+
+		if ($typenow=='page') {
+			
+			$selected_user = ( isset( $_GET[$updater] ) && 
+				!empty( $_GET[$updater] ) && 
+				intval( $_GET[$updater] ) > 0 ) ? 
+					intval( $_GET[$updater] ) :
+					0 ;
+					
+			$selected_status = ( isset( $_GET[$statuz] ) && 
+				!empty( $_GET[$statuz] ) &&
+				array_key_exists( $_GET[$statuz] , $this->statuses ) ) ? 
+					$_GET[$statuz] :
+					0 ;
+		
+			
+			// Add Updater (Users) Dropdown to Filter Options section
+			wp_dropdown_users( array(
+				'name'	=>  "updater" ,
+				'show_option_all'	=>  __("All Updaters") ,
+				'role__in'			=>  array( 'administrator' , 'editor' ) ,
+				'selected'			=>  $selected_user ,
+			));
+			
+			// Add Status Dropdown to Filter Options section
+			$this->wp_dropdown_status( array(
+				'selected'			=>  $selected_status ,
+			));
+		}
+	}	
+	
+	/**
+	/* Add 
+	/* 
+	 */	
+	function pages_filter_options_in_query( $query ) {
+		
+		global $pagenow;
+		global $typenow;
+		
+		/*
+		$qv =& $query->query_vars;
+		
+		if ($pagenow=='edit.php' && isset($qv['business']) && is_numeric($qv['business'])) {
+		
+			$term = get_term_by('id',$qv['business'],'business');
+			$qv['business'] = ($term ? $term->slug : '');
+			
+		}
+		*/
+	}	
+	
+	/**
+	/* Enqueue JavaScript for 
+	/* 
 	 */	
 	function idies_admin_enqueue_scripts( $hook ) {
 
@@ -891,5 +1007,44 @@
 		}
 	}
 	
+	function wp_dropdown_status( $args = '' ) {
+		
+		// Defaults: Add "All Statuses" option; echo output; "All Statuses" selected by default; name of <select> = 'statuz'; no default class for <select>
+		$defaults = array(
+			'show_option_all' => 'All Statuses', 
+			'echo' => 1,
+			'selected' => 0, 
+			'name' => 'statuz', 
+			'class' => '', 
+		);
+	 
+		// Combine default and supplied args
+		$my_args = wp_parse_args( $args, $defaults );
+		$show_option_all = $my_args['show_option_all'];
+		$statuses = array_merge( array( "0"=>$show_option_all) , $this->statuses );
+		$status_keys = array_keys( $statuses );
+	 
+		$output = '';
+		if ( ! empty( $statuses ) ) {
+			
+			$name = esc_attr( $my_args['name'] );
+			$id = " id='$name'";
+			$output = "<select name='{$name}'{$id} class='" . $my_args['class'] . "'>\n";
+	  
+			foreach ( (array) $statuses as $this_key=>$this_status ) {
+	 
+				$_selected = selected( $this_key , $my_args['selected'], false );
+				
+				$output .= "\t<option value='$this_key' $_selected>$this_status</option>\n";
+			}
+	 
+			$output .= "</select>";
+		}
+	  
+		if ( $my_args['echo'] ) {
+			echo $output;
+		}
+		return $output;
+	} 
 }
 ?>
