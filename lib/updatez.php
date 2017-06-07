@@ -134,34 +134,60 @@
 		    define( 'WP_ENV' , 'production' );
 		}
 			
-		// filters and actions
+		/********************************************************************************/
+		/*********** FILTERS AND ACTIONS ************************************************/
+		/********************************************************************************/
+		// FRONT END STATUS
 		add_filter( 'the_content' , array($this , 'showstatus' ) );
+		// DASHBOARD PAGES
 		add_action( 'admin_menu' , array( $this , 'create_admin_menu' ) );
+		// ADMIN CONTENT EDITOR
 		add_action( 'add_meta_boxes_page' , array( $this , 'updatez_meta_box_page' ) );		
 		add_action( 'save_post' , array( $this , 'updatez_save_meta' ) );
+		// ALL PAGES SCREEN
+		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
+		//                  CUSTOM COLUMNS
 		add_action( 'manage_pages_custom_column' , array( $this , 'idies_page_column_content' ) , 10 , 2 );
 		add_filter( 'manage_pages_columns' , array( $this , 'idies_custom_pages_columns' ) );
 		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'idies_sortable_pages_column' ) );
 		add_action( 'pre_get_posts' ,array(  $this , 'idies_custom_columns_column_orderby' ) );
+		//                  QUICK EDIT
 		add_action( 'quick_edit_custom_box' , array( $this , 'idies_display_quickedit_custom') , 10, 2 );
 		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
-		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
-		
-		// Updatez All Pages filter options
+		//                  FILTERING OPTIONS
 		add_filter( 'posts_where' , array($this , 'posts_where' ) );
 		add_action( 'restrict_manage_posts' , array($this , 'add_filter_options' ) );
-		add_filter( 'parse_query' , array($this , 'pages_filter_options_in_query' ) );
 
-		// Set up Variables
+		/********************************************************************************/
+		/*********** VARIABLES **********************************************************/
+		/********************************************************************************/
+		// DEFAULTS
 		$this->default_updater = 'bsouter';
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		$this->statuses = array(
+			"not-started"=>"Not Started",
+			"in-progress"=>"In Progress",
+			"needs-review"=>"Needs Review",
+			"completed"=>"Completed",
+			"do-not-publish"=>"Do Not Publish",
+		);
+		$this->panel_class = array(
+			'not-started' => 'panel-danger' ,
+			'in-progress' => 'panel-warning' ,
+			'needs-review' => 'panel-info' ,
+			'completed' => 'panel-success' ,
+			'do-not-publish' => 'panel-default' ,
+		);
+		// TRACK THESE PAGE STATUSES ONLY
 		$this->post_status  = 'publish,private,draft';
+		// _GET VARS FOR ALL PAGES
 		$this->updater = "updater";
 		$this->statuz = "statuz";
-		
-		$this->all_users = get_users( 'orderby=nicename' );	
+		$this->all_users = get_users( 'orderby=nicename' );
+		// IMPORT EXPORT
 		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
+		$this->tmpurl = '/wp-tmp/';							// TEMP FILE LOCATION
 		$this->csv_fields = array("ID", 
 			"Title",
 			"Edit",
@@ -170,32 +196,6 @@
 			"Updater",
 			"Comment",
 			"Last Revised" );
-
-		// TEMP FILE LOCATION
-		$this->tmpurl = '/wp-tmp/';
-			
-		$this->statuses = array(
-			"not-started"=>"Not Started",
-			"in-progress"=>"In Progress",
-			"needs-review"=>"Needs Review",
-			"completed"=>"Completed",
-			"do-not-publish"=>"Do Not Publish",
-		);
-		
-		$this->panel_class = array(
-			'not-started' => 'panel-danger' ,
-			'in-progress' => 'panel-warning' ,
-			'needs-review' => 'panel-info' ,
-			'completed' => 'panel-success' ,
-			'do-not-publish' => 'panel-default' ,
-		);
-		
-		/*
-		$this->all_pages = $this->get_page_updates();
-		foreach ( $this->all_pages as $thispage ){		
-			update_post_meta( $thispage->ID  , 'updatez_status' , 'not-started' ) ;
-		}
-		*/
 	}
 	
 	/**
@@ -234,9 +234,51 @@
 	 */	
 	function create_admin_menu() {
 		
-		// Create the top level admin menu item
-		add_menu_page( 'Status Updates' , 'Status Updates' , 'edit_posts' , 'idies-status-menu' , array( $this , 'show_settings_page' ) ); 
+		add_menu_page(   'Status Updates' ,    'Status Updates' , 'edit_posts' , 'idies-status-menu' , array( $this , 'show_overview_page' ) , 'dashicons-yes' );
+		add_submenu_page('idies-status-menu' , 'Status Updates Overview', 'Overview',  'edit_posts', 'idies-status-menu', array( $this , 'show_overview_page' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Settings', 'Settings',  'edit_theme_options', 'idies-status-settings', array( $this , 'show_settings_page' ) );
+		add_submenu_page(    'idies-status-menu' , 'Status Updates Import/Export', 'Import/Export',  'edit_theme_options', 'idies-status-import', array( $this , 'show_import_page' ) );
 		
+	}
+
+	/**
+	/* Show the Dashboard OVERVIEW Page
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function show_overview_page() {
+		
+		if ( !current_user_can( 'edit_posts' ) )  {
+			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+		}
+		
+		$result = '';
+		
+		$result .= '<div class="wrap">';
+		$result .=  '<h1>Overview</h1>';
+		
+		$result .=  '<table class="form-table">';
+		$result .=  '<tbody>';
+		$result .=  '<tr>';
+		$result .=  '<th scope="row">All Pages</th>';
+		$result .=  '<td>' . count( $this->all_pages ) . '</td>';
+		$result .=  '<td><em>Includes published, private, and draft</em></td>';
+		$result .=  '</tr>';
+		
+		$result .=  '<tr>';
+		$result .=  '<th scope="row">Complete</th>';
+		$result .=  '<td>' . count( $completed_pages ) . '</td>';
+		$result .=  '<td><em>Pages that have "Completed" status</em></td>';
+		$result .=  '</tr>';
+		
+		$result .=  '</tbody>';
+		$result .=  '</table>';
+		
+		$result .= '</div>';
+		
+		echo $result;
 	}
 
 	/**
@@ -248,56 +290,37 @@
 	 */	
 	function show_settings_page() {
 		
-		$result = array();
-		
+		$actions = array( 'update' , 'nuclear' , 'import' );
+		$this_page = 'settings';
+
 		if ( !current_user_can( 'edit_theme_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
+		
+		$result = array();
 
 		// PAGES
 		$this->all_pages = $this->get_page_updates();
 		
-		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
-		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
-		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
+		// Get Options
+		$this->get_options();
 
-		// Get Action
-		$the_action = ( isset( $_POST['update'] ) ? 'update' :
-					  ( isset( $_POST['nuclear'] ) ? 'nuclear' :
-					  ( isset( $_POST['import'] ) ? 'import' :
-						false ) ) );
-					
-		if ( ( $the_action ) && ( ! empty( $_POST ) ) ) {
-	
-			check_admin_referer( 'save_settings_action' , 'save_settings_nonce' );
-		
-			switch ($the_action) {
-				case 'import' :
-					$result = $this->import();
-				break;
-				case 'nuclear' :
-					$this->nuclear(  );
-				break;
-				case 'update' :
+		// Get and Do the Action 
+		foreach ( $actions as $this_action ) {
+			if ( isset( $_POST[ $this_action ] ) && !empty( $_POST[ $this_action ] ) ) {
 				
-					if ( isset( $_POST[ 'default_tmppath' ] ) ) {
-						$this->default_tmppath = trailingslashit( $_POST[ 'default_tmppath' ] );
-						update_option( 'updatez_default_tmppath' , $this->default_tmppath );
-					}
-					
-					if ( isset( $_POST[ 'default_updater' ] ) ) {
-						$this->default_updater = sanitize_user( $_POST[ 'default_updater' ] );
-						update_option( 'updatez_default_updater' , $this->default_updater );
-					}
-					
-					if ( isset( $_POST[ 'default_status' ] ) ) {
-						$this->default_status = sanitize_text_field( $_POST[ 'default_status' ] );
-						update_option( 'updatez_default_status' , $this->default_status );
-					}
-					
-				break;
+				check_admin_referer( 'save_settings_action' , 'save_settings_nonce' );
+				$result = array_merge( $result , $this->$this_action(  ) );
+				
 			}
 		}
+		/*/
+		$result = array_merge( $result , 
+			array( "info"=>"defaults: " . 
+				$this->default_updater . ", " .
+				$this->default_status . ", " .
+				$this->default_tmppath ) );
+		/*/
 		
 		// Write the export file each time page is loaded.
 		$this->write_export_data();
@@ -317,13 +340,14 @@
 		
 		// Show the form
 		echo '<div class="wrap">';
-		echo '<h1>Status Updates Settings</h1>';
+		echo '<h1>Settings</h1>';
 		
+		// Show Dashboard Notice ( notice-error, -success, -info, or -warning )
 		foreach ($result as $thiskey=>$thisvalue) {
 			echo '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 		}
 		
-		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-menu">';
+		echo '<form method="post" action="">';
 		echo '<input type="hidden" name="options" value="settings">';
 		echo '<input type="hidden" name="update" value="update">';
 		wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' );
@@ -367,23 +391,11 @@
 		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
 		echo '</form>';
 
-		echo '<form method="post" action="/wp-admin/admin.php?page=idies-status-menu" enctype="multipart/form-data">';
+		echo '<form method="post" action="" enctype="multipart/form-data">';
 		wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' );
 		echo '<table class="form-table">';
 		echo '<tbody>';
 
-		echo '<tr>';
-		echo '<th scope="row">All Pages</th>';
-		echo '<td>' . count( $this->all_pages ) . '</td>';
-		echo '<td><em>Includes published, private, and draft</em></td>';
-		echo '</tr>';
-		
-		echo '<tr>';
-		echo '<th scope="row">Complete</th>';
-		echo '<td>' . count( $completed_pages ) . '</td>';
-		echo '<td><em>Pages that have "Completed" status</em></td>';
-		echo '</tr>';
-		
 		echo '<tr>';
 		echo '<th scope="row">Export Page Updates as CSV...</th>';
 		echo '<td><a class="button button-secondary" href="' . $this->tmpurl . $this->export_fname . '">Export</a></td>';
@@ -416,6 +428,30 @@
 		echo '</div>';
 
 		return;
+	}
+
+	/**
+	/* Show the Dashboard IMPORT/EXPORT Page
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function show_import_page() {
+		
+		if ( !current_user_can( 'edit_theme_options' ) )  {
+			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+		}
+		
+		$actions = array( 'import' );
+		
+		$result = '';
+		
+		$result .= '<div class="wrap">';
+		$result .=  '<h1>Import/Export</h1>';
+		$result .= '</div>';
+		
+		echo $result;
 	}
 
 	/**
@@ -519,8 +555,8 @@
 			update_post_meta( $this_csv[0]  , 'updatez_comment' , $this_csv[6] ) ;
 		}
 
-		if ( strlen($error) == 0 ) $status = "success";
-		return array($status=>"Uploaded " . $_FILES['importfile']['name'] . ". " . $error) ;
+		$result = ( strlen($error) > 0 ) ? array( 'error'=>$error ) : array( 'success'=>"Uploaded " . $_FILES['importfile']['name'] . ". " ) ;
+		return $result;
 		
 	}		
 
@@ -536,6 +572,7 @@
 		$output = '';
 		$sep = ',';
 		$quo = '"';
+		$fname = $this->default_tmppath . "/" . $this->export_fname;
 
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
 		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
@@ -553,7 +590,7 @@
 		}
 		
 		//write temp file
-		$expfile = fopen( $this->default_tmppath . $this->export_fname , "w") or die("Unable to create ". $this->default_tmppath . $this->export_fname ." file.");
+		$expfile = fopen( $fname , "w") or die("Unable to create ". $fname ." file.");
 		fwrite($expfile, $output);
 		fclose($expfile);
 		
@@ -568,12 +605,15 @@
 	 */	
 	function nuclear() {
 		
-		foreach ( $this->all_pages as $thispage ){
+		$all_pages = $this->get_page_updates();
+		foreach ( $all_pages as $thispage ){
 			update_post_meta( $thispage->ID , 'updatez_status' , $this->default_status ) ;
 			update_post_meta( $thispage->ID , 'updatez_updater' , $this->default_updater ) ;
 			update_post_meta( $thispage->ID , 'updatez_comment' , '' ) ;
 		}
 	
+		$result = array( 'success'=>'All Pages reset.' ) ; 
+		return $result;
 	}		
 	
 
@@ -872,6 +912,51 @@
 	}
 
 	/**
+	/* Get plugin options or use default options
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function get_options() {
+		
+		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
+		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
+		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
+	}
+
+	/**
+	/* Update/Set plugin options from Updated or Default options
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function update() {
+		
+		$options = array( 
+			'default_tmppath' ,
+			'default_updater' ,
+			'default_status' ,
+		);
+		$updated = false;
+	
+		foreach( $options as $this_option ) {
+			
+			if ( isset( $_POST[ $this_option ] ) && !empty( $_POST[ $this_option ] ) ) {
+				
+				$this->$this_option = rtrim( $_POST[ $this_option ] , '/' );
+				update_option( 'updatez_' . $this_option , $this->$this_option );
+				
+				$updated = true;
+			}			
+		}
+		
+		$result = ( $updated ) ? array( 'success'=>'Updates applies.' ) : array( 'warning'=>'No updates to apply.' ) ; 
+		return $result;
+	}
+
+	/**
 	/* Saves custom fields in Quick Edit box on All Pages screen
 	/* 
 	 * @since  1.1
@@ -971,27 +1056,6 @@
 				'selected'			=>  $selected_status ,
 			));
 		}
-	}	
-	
-	/**
-	/* Add 
-	/* 
-	 */	
-	function pages_filter_options_in_query( $query ) {
-		
-		global $pagenow;
-		global $typenow;
-		
-		/*
-		$qv =& $query->query_vars;
-		
-		if ($pagenow=='edit.php' && isset($qv['business']) && is_numeric($qv['business'])) {
-		
-			$term = get_term_by('id',$qv['business'],'business');
-			$qv['business'] = ($term ? $term->slug : '');
-			
-		}
-		*/
 	}	
 	
 	/**
