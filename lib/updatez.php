@@ -255,6 +255,21 @@
 		}
 		
 		$result = '';
+		$this->all_pages = $this->get_page_updates();
+		// More info
+		/*/
+		$update_args = array( 
+			'meta_key' => 'updatez_status' ,
+			'meta_compare' => 'NOT EXISTS' , 
+			'meta_value' => 'foobar' ,
+		);
+		$updated_pages = $this->get_page_updates( $update_args );
+		/*/
+		$completed_args = array( 
+			'meta_key' => 'updatez_status' ,
+			'meta_value' => 'completed' ,
+		);
+		$completed_pages = $this->get_page_updates( $completed_args );
 		
 		$result .= '<div class="wrap">';
 		$result .=  '<h1>Overview</h1>';
@@ -299,8 +314,6 @@
 		
 		$result = array();
 
-		// PAGES
-		$this->all_pages = $this->get_page_updates();
 		
 		// Get Options
 		$this->get_options();
