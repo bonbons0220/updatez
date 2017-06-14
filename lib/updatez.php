@@ -34,7 +34,7 @@
 	public $panel_class;
 	
 	/**
-	 * Array of all pages that should have a status.
+	 * Array of all pages (all of which can/should have a status).
 	 *
 	 * @var    array
 	 */
@@ -59,14 +59,14 @@
 	 *
 	 * @var    string
 	 */
-	public $post_status  = 'publish,private,draft' ;
+	public $post_status;
 	
 	/**
 	 * Which post type to show update status on.
 	 *
 	 * @var    string
 	 */
-	public $post_type = 'page';
+	public $post_type;
 	
 	/**
 	 * Array of all users ordered by display name.
@@ -126,8 +126,9 @@
 	 */	
 	public function __construct() {
 		
-		register_activation_hook( __FILE__, '$this->activate' );
-		//register_deactivation_hook( __FILE__, '$this->deactivate' );
+		//register_activation_hook( __FILE__, '$this->activate' );
+		register_activation_hook( __FILE__, array( 'updatez', 'activate' ) );
+		//register_deactivation_hook( __FILE__, 'deactivate' );
 		
 		// Don't show on Prod/WWW
 		if ( !defined( 'WP_ENV' )) {
@@ -139,21 +140,28 @@
 		/********************************************************************************/
 		// FRONT END STATUS
 		add_filter( 'the_content' , array($this , 'showstatus' ) );
+		
 		// DASHBOARD PAGES
 		add_action( 'admin_menu' , array( $this , 'create_admin_menu' ) );
+		add_action( 'admin_menu' , array( $this , 'get_pages' ) );
+		
 		// ADMIN CONTENT EDITOR
 		add_action( 'add_meta_boxes_page' , array( $this , 'updatez_meta_box_page' ) );		
 		add_action( 'save_post' , array( $this , 'updatez_save_meta' ) );
+		
 		// ALL PAGES SCREEN
 		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
+		
 		//                  CUSTOM COLUMNS
 		add_action( 'manage_pages_custom_column' , array( $this , 'idies_page_column_content' ) , 10 , 2 );
 		add_filter( 'manage_pages_columns' , array( $this , 'idies_custom_pages_columns' ) );
 		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'idies_sortable_pages_column' ) );
 		add_action( 'pre_get_posts' ,array(  $this , 'idies_custom_columns_column_orderby' ) );
+		
 		//                  QUICK EDIT
 		add_action( 'quick_edit_custom_box' , array( $this , 'idies_display_quickedit_custom') , 10, 2 );
 		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
+		
 		//                  FILTERING OPTIONS
 		add_filter( 'posts_where' , array($this , 'posts_where' ) );
 		add_action( 'restrict_manage_posts' , array($this , 'add_filter_options' ) );
@@ -165,6 +173,17 @@
 		$this->default_updater = 'bsouter';
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		$this->meta_fields = array( 
+			'updatez_status',
+			'updatez_updater',
+			'updatez_comment',
+		);
+		$this->post_type = 'page';
+		$this->post_status  = array( 
+			'publish',
+			'private',
+			'draft') ;
+			
 		$this->statuses = array(
 			"not-started"=>"Not Started",
 			"in-progress"=>"In Progress",
@@ -179,12 +198,12 @@
 			'completed' => 'panel-success' ,
 			'do-not-publish' => 'panel-default' ,
 		);
-		// TRACK THESE PAGE STATUSES ONLY
-		$this->post_status  = 'publish,private,draft';
+		
 		// _GET VARS FOR ALL PAGES
 		$this->updater = "updater";
 		$this->statuz = "statuz";
 		$this->all_users = get_users( 'orderby=nicename' );
+		
 		// IMPORT EXPORT
 		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
 		$this->tmpurl = '/wp-tmp/';							// TEMP FILE LOCATION
@@ -207,19 +226,18 @@
 	 */	
 	function activate() {
 
-		$this->all_pages = $this->get_page_updates();
-		
 		if ( ! get_user_by( 'slug' , $this->default_updater ) ) {
 			$the_user = get_users( array('role'=>'edit_theme_options' , 'number'=>1 , 'orderby'=>'ID' ) );
 			$this->default_updater = $the_user->user_nicename;
 		}
 
+		// Make sure each page has a statuses that is defined, and an updater who is a user in the system.
 		foreach ( $this->all_pages as $thispage ){
 		
-			if ( ! array_key_exists( get_post_meta( $thispage->ID , "updatez_status" , true ) , $this->statuses ) )
+			if ( ! array_key_exists( $thispage->updatez_status , $this->statuses ) )
 				update_post_meta( $thispage->ID  , 'updatez_status' , $this->default_status ) ;
 
-			if ( ! get_user_by( 'slug' , get_post_meta( $thispage->ID , "updatez_updater" , true ) ) ) { 
+			if ( ! get_user_by( 'slug' , $thispage->updatez_updater ) ) { 
 				update_post_meta( $thispage->ID  , 'updatez_updater' , $this->default_updater ) ;
 			}
 		}
@@ -234,10 +252,13 @@
 	 */	
 	function create_admin_menu() {
 		
-		add_menu_page(   'Status Updates' ,    'Status Updates' , 'edit_posts' , 'idies-status-menu' , array( $this , 'show_overview_page' ) , 'dashicons-yes' );
-		add_submenu_page('idies-status-menu' , 'Status Updates Overview', 'Overview',  'edit_posts', 'idies-status-menu', array( $this , 'show_overview_page' ) );
-		add_submenu_page('idies-status-menu' , 'Status Updates Settings', 'Settings',  'edit_theme_options', 'idies-status-settings', array( $this , 'show_settings_page' ) );
-		add_submenu_page(    'idies-status-menu' , 'Status Updates Import/Export', 'Import/Export',  'edit_theme_options', 'idies-status-import', array( $this , 'show_import_page' ) );
+		// Add Dashboard Page and Main Menu item
+		add_menu_page(   'Status Updates' , 'Status Updates' , 'edit_posts' , 'idies-status-menu', array( $this , 'show_overview_page' ) ,'dashicons-yes' );
+		
+		// Add subpages to the main menu. Note that the Overview page re-uses the Main page slug, which avoids a duplicate subpage for the main page
+		add_submenu_page('idies-status-menu' , 'Status Updates Overview',      'Overview',      'edit_posts',         'idies-status-menu',     array( $this , 'show_overview_page' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Settings',      'Settings',      'edit_theme_options', 'idies-status-settings', array( $this , 'show_settings_page' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Import/Export', 'Import/Export', 'edit_theme_options', 'idies-status-import',   array( $this , 'show_import_page' ) );
 		
 	}
 
@@ -254,40 +275,83 @@
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 		
+		// Go through pages and get summary of page status vs update status,
+		// and user vs update status.
+		$summary = $this->get_summary();
+
 		$result = '';
-		$this->all_pages = $this->get_page_updates();
-		// More info
-		/*/
-		$update_args = array( 
-			'meta_key' => 'updatez_status' ,
-			'meta_compare' => 'NOT EXISTS' , 
-			'meta_value' => 'foobar' ,
-		);
-		$updated_pages = $this->get_page_updates( $update_args );
-		/*/
-		$completed_args = array( 
-			'meta_key' => 'updatez_status' ,
-			'meta_value' => 'completed' ,
-		);
-		$completed_pages = $this->get_page_updates( $completed_args );
 		
 		$result .= '<div class="wrap">';
 		$result .=  '<h1>Overview</h1>';
 		
+		/* PAGES */
+		$result .=  '<h2>Pages</h2>';
 		$result .=  '<table class="form-table">';
+		$result .=  '<thead>';
+		$result .=  '<tr>';
+		$result .=  '<th>Update Status\Page Status</th>';
+		foreach( $this->post_status as $this_page_status ) $result .=  '<th>' . ucfirst( $this_page_status ) . '</th>';
+		$result .=  '</tr>';
+		$result .=  '</thead>';
 		$result .=  '<tbody>';
-		$result .=  '<tr>';
-		$result .=  '<th scope="row">All Pages</th>';
-		$result .=  '<td>' . count( $this->all_pages ) . '</td>';
-		$result .=  '<td><em>Includes published, private, and draft</em></td>';
-		$result .=  '</tr>';
+		foreach( $this->statuses as $this_update_status ) {
+			$result .=  '<tr>';
+			$result .=  '<th scope="row">' . $this_update_status . '</th>';
+			foreach( $this->post_status as $this_page_status ) {
+				$result .=  
+					'<td>' . 
+					'<a href="/wp-admin/edit.php?post_type=page' .
+						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . 
+						'&post_status=' . $this_page_status . '">' . 
+					$summary['pages'][ $this_page_status ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . 
+					'</a>';
+					'</td>';
+			}
+			$result .=  '</tr>';
+		}
+		$result .=  '</tbody>';
+		$result .=  '</table>';
 		
-		$result .=  '<tr>';
-		$result .=  '<th scope="row">Complete</th>';
-		$result .=  '<td>' . count( $completed_pages ) . '</td>';
-		$result .=  '<td><em>Pages that have "Completed" status</em></td>';
-		$result .=  '</tr>';
+		/*/
+		$result .=  '<pre>';
+		$result .=  var_export( $this->all_users , true );
+		$result .=  '</pre>';
+		/*/
 		
+		/* USERS */
+		$result .=  '<h2>Users</h2>';
+		$result .=  '<table class="form-table">';
+		$result .=  '<thead>';
+		$result .=  '<tr>';
+		$result .=  '<th>Users\Page Status</th>';
+		foreach( $this->statuses as $this_update_status ) $result .=  '<th>' . $this_update_status . '</th>';
+		$result .=  '</tr>';
+		$result .=  '</thead>';
+		$result .=  '<tbody>';
+		foreach( $this->all_users as $this_user ) {
+			if ( !array_key_exists( $this_user->user_nicename , $summary['users'] ) ) continue;
+				$result .=  '<tr>';
+				$result .=  '<th scope="row">' . $this_user->display_name . '</th>';
+				foreach( $this->statuses as $this_update_status ) {
+					$result .=  '<td>' . 
+					'<a href="/wp-admin/edit.php?post_type=page&all_posts=1' .
+						'&updater=' . $this_user->ID .
+						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . '">' . 
+					$summary['users'][ $this_user->user_nicename ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . 
+					'</a>';
+					'</td>';
+				}
+				$result .=  '</tr>';
+		}
+		/*/
+		foreach( $summary['users'] as $this_user_slug=>$this_user_summary ) {
+			$result .=  '<tr>';
+			$result .=  '<th scope="row">' . $this_user_slug . '</th>';
+			foreach( $this->statuses as $this_update_status ) $result .=  '<td>' . $summary['users'][ $this_user_slug ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . '</td>';
+			$result .=  '</tr>';
+		}
+		/*/
+	
 		$result .=  '</tbody>';
 		$result .=  '</table>';
 		
@@ -468,7 +532,32 @@
 	}
 
 	/**
-	// Get the Pages 
+	// Get All Pages 
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return void
+	 */	
+	function get_pages( $post_object = null , $return = false ) {
+		global $post;
+		
+		// Get or Set query variables
+		$args = array(
+			'posts_per_page' => -1,
+			'post_type' => $this->post_type,
+			'post_status' => implode( ',' , $this->post_status ),
+		); 
+		$the_pages = get_posts( $args );
+		
+		if ( $return ) return $the_pages;
+		
+		$this->all_pages = $the_pages;
+		return;
+
+	}
+
+	/**
+	// Get Page Updates 
 	/* 
 	 * @since  1.1
 	 * @access public
@@ -514,7 +603,7 @@
 			'posts_per_page' => -1,
 			'offset' => $offset,
 			'post_type' => $this->post_type,
-			'post_status' => $this->post_status,
+			'post_status' => implode( ',' , $this->post_status ),
 		); 
 		foreach ($newargs as $thiskey=>$thisvalue) 
 			$args[$thiskey] = $thisvalue;
@@ -553,15 +642,15 @@
 		$error = '' ; 
 		foreach( $contents as $this_line ) {
 		$this_csv = str_getcsv( $this_line ) ;
-			
-			// Validate input
-			if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
-				$error .= "Error. User not found: " . $this_csv[5] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
-				continue;
-			} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
-				$error .= "Error. Status not found: " . $this_csv[4] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
-				continue;
-			}			
+		
+		// Validate input
+		if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
+			$error .= "Error. User not found: " . $this_csv[5] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
+			continue;
+		} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
+			$error .= "Error. Status not found: " . $this_csv[4] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
+			continue;
+		}			
 			
 			update_post_meta( $this_csv[0]  , 'updatez_updater' , $this_csv[5] ) ;
 			update_post_meta( $this_csv[0]  , 'updatez_status' , $this_key ) ;
@@ -998,7 +1087,7 @@
 	}
 
 	/**
-	/* Applu Updatez filter to all posts query
+	/* Apply Updatez filter to all posts query
 	/* 
 	 */	
 	function posts_where( $where ) {
@@ -1014,7 +1103,7 @@
 
 				if ( false !== $updater_info = get_userdata( intval( $_GET[$updater ] ) ) ) {
 					$where .= " and ID in " .
-						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '" . $updater_info->user_login . "' and post_id in " .
+						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '" . $updater_info->user_nicename . "' and post_id in " .
 						"(select post_id from sdsswp_dr14_test.wp_postmeta where meta_key='updatez_updater' ) )";
 				}
 			}
@@ -1070,7 +1159,49 @@
 			));
 		}
 	}	
-	
+
+	/**
+	/* Get summary of Status Updates for Overview page 
+	/* 
+	 */	
+	function get_summary(  ) {
+		$page_summary = array( );
+		foreach ( $this->post_status as $ps ) {
+			foreach ( $this->statuses as $uskey=>$usvalue ) {
+				$page_summary[ $ps ][ $uskey ] = 0;
+			}
+		}
+		
+		$user_summary = array();
+		$this_user_summary = array();
+		foreach ( $this->statuses as $uskey=>$usvalue ) {
+			$this_user_summary[ $uskey ] = 0;
+		}
+		
+		//loop through all the pages
+		foreach ( $this->all_pages as $this_page ) {
+			/*/
+			/*/
+			// if this page's post_status is not one we are tracking, continue to the next.
+			if ( !in_array( $this_page->post_status , $this->post_status ) ) continue;
+			
+			//pages
+			$page_summary[ $this_page->post_status ][ $this_page->updatez_status ]++;
+			
+			//users
+			if ( !array_key_exists( $this_page->updatez_updater , $user_summary ) ) {
+				$user_summary[ $this_page->updatez_updater ] = $this_user_summary;
+			}
+			$user_summary[ $this_page->updatez_updater ][ $this_page->updatez_status ]++;
+		}
+		
+		$summary = array( 
+			'pages'=>$page_summary ,
+			'users'=>$user_summary ,
+		);
+		return $summary;
+	}
+		
 	/**
 	/* Enqueue JavaScript for 
 	/* 
