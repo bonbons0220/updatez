@@ -311,6 +311,8 @@
 		}
 		$result .=  '</tbody>';
 		$result .=  '</table>';
+		
+		$result .=  '<hr width="50%">';
 			
 		/* USERS */
 		$result .=  '<h2>Users</h2>';
