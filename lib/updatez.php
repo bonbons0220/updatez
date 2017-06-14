@@ -289,7 +289,7 @@
 		$result .=  '<table class="form-table">';
 		$result .=  '<thead>';
 		$result .=  '<tr>';
-		$result .=  '<th>Update Status\Page Status</th>';
+		$result .=  '<th>&nbsp;</th>';
 		foreach( $this->post_status as $this_page_status ) $result .=  '<th>' . ucfirst( $this_page_status ) . '</th>';
 		$result .=  '</tr>';
 		$result .=  '</thead>';
@@ -311,19 +311,13 @@
 		}
 		$result .=  '</tbody>';
 		$result .=  '</table>';
-		
-		/*/
-		$result .=  '<pre>';
-		$result .=  var_export( $this->all_users , true );
-		$result .=  '</pre>';
-		/*/
-		
+			
 		/* USERS */
 		$result .=  '<h2>Users</h2>';
 		$result .=  '<table class="form-table">';
 		$result .=  '<thead>';
 		$result .=  '<tr>';
-		$result .=  '<th>Users\Page Status</th>';
+		$result .=  '<th>&nbsp;</th>';
 		foreach( $this->statuses as $this_update_status ) $result .=  '<th>' . $this_update_status . '</th>';
 		$result .=  '</tr>';
 		$result .=  '</thead>';
