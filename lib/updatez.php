@@ -476,8 +476,13 @@
 		$result .= '</tr>';
 		
 		$result .= '<tr>';
-		$result .= '<th scope="row">Reset All Pages to Defaults<br></th>';
+		$result .= '<th scope="row">Reset All Pages to Defaults</th>';
 		$result .= '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Reset</button></td>';
+		$result .= '</tr>';
+	
+		$result .= '<tr>';
+		$result .= '<th scope="row">Email Page Update Statuses to Updaters</th>';
+		$result .= '<td><button class="button button-secondary" id="notify" name="notify" value="notify">Send the Emails</button></td>';
 		$result .= '</tr>';
 	
 		$result .= '</tbody>';
@@ -661,8 +666,8 @@
 		$frontend = ( isset( $_POST[ 'frontend' ] ) ) ? true : false ; 
 		$updated = ( update_option( 'updatez_frontend' , $frontend ) ) ? true : $updated ;
 
-		$result = ( $updated ) ? array( 'success'=>'Updates applied.' ) : array( 'warning'=>'No updates to apply.' ) ; 
-		$result['info'] = var_export( $_POST , true);
+		$result = ( $updated ) ? array( 'success'=>'Updates applied.' ) : array(  ) ; 
+		//$result['info'] = var_export( $_POST , true);
 		return $result;
 	}
 
@@ -693,8 +698,61 @@
 	 * @return void
 	 */	
 	function do_action_notify() {
+		$result = array();
+		$sent = 0;
+		$notsent = 0;
 		
-		$result = array( 'error'=>'Sorry, "Notify Users" functionality is not implemented yet.' ) ; 
+		//Need to override the default 'text/plain' content type to send a HTML email.
+		add_filter('wp_mail_content_type', array($this, 'override_mail_content_type'));
+
+		// Get the list of pages of each update status for each user
+		$user_updates = $this->get_user_updates();
+		//$all_bodies = '';
+		
+		//Let auto-responders and similar software know this is an auto-generated email
+		//that they shouldn't respond to.
+		$headers = array('Auto-Submitted: auto-generated');
+		$subject = 'SDSS Status Updates Reminder';
+
+		// send an email to each user with update statuses in it.
+		foreach ( $user_updates as $slug=>$this_user_update ) {
+			
+			$body = '';
+			
+			// can't send it if they don't exist
+			if ( false !== $thisuser = get_user_by( 'slug' , $slug ) ) {
+				
+				$body .= '<h2>SDSS Page Status Update for ' . $thisuser->display_name . '.</h2>';
+				foreach( $this->statuses as $this_status_key => $this_status ) {
+					
+					// No blank notifications
+					if ( empty( $this_user_update[ $this_status_key ] ) ) continue;
+					
+					$body .=  '<h3>Your Pages that are ' . $this_status . '</h3>' . PHP_EOL;
+					$body .=  "<ul>" . PHP_EOL;
+					foreach ( $this_user_update[ $this_status_key ] as $thispage ) {
+						$body .=  '<li><a href="' . get_the_permalink( $thispage ) . '">' . get_the_title( $thispage ) . '</a></li>' . PHP_EOL;
+					}
+					$body .=  "</ul>" . PHP_EOL;
+				}
+				//$success = wp_mail( $thisuser->user_email , $subject , $body, $headers);
+				//if ( wp_mail( 'bonbons0220@gmail.com' , $subject , $body, $headers) )
+				if ( wp_mail( $thisuser->user_email , $subject , $body, $headers) )
+					$sent++;
+				else 
+					$notsent++;
+				
+				//$all_bodies .= $body;
+			}
+		}
+
+		//Remove the override so that it doesn't interfere with other plugins that might
+		//want to send normal plaintext emails.
+		remove_filter('wp_mail_content_type', array($this, 'override_mail_content_type'));
+		
+		$result = ( $sent ) ? array_merge( $result , array( 'success'=>"Sent $sent Emails!" ) ) : $result ; 
+		$result = ( $notsent ) ? array_merge( $result , array( 'error'=>"Could not send $notsent emails." ) ) : $result ; 
+		
 		return $result;
 	}
 
@@ -811,6 +869,17 @@
 		return $fname;
 		
 	}		
+
+	/**
+	/* Change the default mail content type to html
+	 *
+	 * @since  1.4
+	 * @access public
+	 * @return string
+	 */	
+	function override_mail_content_type( $content_type){
+		return 'text/html';
+	}
 
 	/**
 	/* Save Meta box Data from Content Editor
@@ -1073,20 +1142,6 @@
 	}
 
 	/**
-	/* Get plugin options or use default options
-	/* 
-	 * @since  1.4
-	 * @access public
-	 * @return void
-	 */	
-	function get_options() {
-		$this->frontend = get_option( 'updatez_frontend' , $this->default_frontend );
-		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
-		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
-		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
-	}
-
-	/**
 	/* Saves custom fields in Quick Edit box on All Pages screen
 	/* 
 	 * @since  1.1
@@ -1189,6 +1244,46 @@
 	}	
 
 	/**
+	/* Get plugin options or use default options
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function get_options() {
+		$this->frontend = get_option( 'updatez_frontend' , $this->default_frontend );
+		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
+		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
+		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
+	}
+
+	/**
+	/* Get Users' Pages and their Update Status for Notification Emails 
+	 * @since  1.4
+	 * @access public
+	 * @return $user_updates
+	 */	
+	function get_user_updates(  ) {
+		
+		$user_updates = array();
+		$this_user = array();
+		foreach ( $this->statuses as $userkey=>$uservalue ) {
+			$this_user[ $userkey ] = array();
+		}
+		
+		foreach ( $this->all_pages as $this_page ) {
+			if ( !array_key_exists( $this_page->updatez_updater , $user_updates ) ) {
+				$user_updates[ $this_page->updatez_updater ] = $this_user;
+			}
+			if ( !empty( $this_page->updatez_status ) ) {
+				$user_updates[ $this_page->updatez_updater ][ $this_page->updatez_status ][] = $this_page->ID;
+			}
+		}
+		
+		return $user_updates;
+	}
+
+	/**
 	/* Get summary of Status Updates for Overview page 
 	/* 
 	 */	
@@ -1208,8 +1303,6 @@
 		
 		//loop through all the pages
 		foreach ( $this->all_pages as $this_page ) {
-			/*/
-			/*/
 			// if this page's post_status is not one we are tracking, continue to the next.
 			if ( !in_array( $this_page->post_status , $this->post_status ) ) continue;
 			
