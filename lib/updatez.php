@@ -55,6 +55,27 @@
 	public $default_status;
 
 	/**
+	 * Name of directory to hold temporary files.
+	 *
+	 * @var    string
+	 */	 
+	public $default_tmppath;
+	
+	/**
+	 * Default for Show status on front end
+	 *
+	 * @var    string
+	 */	 
+	public $default_frontend;
+	
+	/**
+	 * Show status on front end
+	 *
+	 * @var    string
+	 */	 
+	public $frontend;
+	
+	/**
 	 * Which publication status to show update status on.
 	 *
 	 * @var    string
@@ -74,13 +95,6 @@
 	 * @var    array
 	 */
 	public $all_users = array();
-	
-	/**
-	 * Name of directory to hold temporary files.
-	 *
-	 * @var    string
-	 */	 
-	public $default_tmppath;
 	
 	/**
 	 * Name of url for temporary files.
@@ -172,6 +186,7 @@
 		/*********** VARIABLES **********************************************************/
 		/********************************************************************************/
 		// DEFAULTS
+		$this->default_frontend = true;
 		$this->default_updater = 'bsouter';
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
@@ -204,6 +219,7 @@
 		// _GET VARS FOR ALL PAGES
 		$this->updater = "updater";
 		$this->statuz = "statuz";
+		
 		$this->all_users = get_users( 'orderby=nicename' );
 		
 		// SETTINGS PAGES ACTIONS
@@ -395,11 +411,11 @@
 		$result = '';
 		$this_page = 'settings';
 		
-		// Get Options
-		$this->get_options();
-		
 		// Get and Do the Action, if there is one
 		$messages = $this->do_action( $this_page );
+		
+		// Get Options
+		$this->get_options();
 		
 		// Show Dashboard Messages ( notice-error, -success, -info, or -warning )
 		foreach ($messages as $thiskey=>$thisvalue) {
@@ -418,10 +434,16 @@
 		$result .= '<tbody>';
 
 		$result .= '<tr>';
+		$result .= '<th scope="row">Show Status on Front End</th>';
+		$result .= '<td>';
+		$result .= '<input type="checkbox" name="frontend" value="true" id="frontend" ' . checked( $this->frontend , true , false ) . ' >';
+		$result .= '</td>';
+		$result .= '</tr>';
+
+		$result .= '<tr>';
 		$result .= '<th scope="row">Default Path (Writable dir for temp files)</th>';
 		$result .= '<td>';
-		$result .= '<input name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
-		$result .= '</select>';
+		$result .= '<input type="text" name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
 		$result .= '</td>';
 		$result .= '</tr>';
 
@@ -580,7 +602,7 @@
 	}
 
 	/**
-	// Do the action on this page`
+	// Deal with action requested for dashboard page`
 	/* 
 	 * @since  1.4
 	 * @access public
@@ -591,7 +613,7 @@
 		$messages = array();
 		
 		if ( !array_key_exists( $this_page , $this->actions ) ) {
-			$messages = array_merge( $messages , array( 'error'=>"$this_page not defined." ) );
+			$messages = array_merge( $messages , array( 'error'=>"$this_page has no actions." ) );
 			return $messages;
 		}
 		
@@ -609,8 +631,6 @@
 				}
 			}
 		}
-		//if ( $nothing ) $messages = array_merge( $messages , array( 'info'=>"Nothing done on $this_page." ) );
-
 		return $messages;
 	}
 
@@ -623,25 +643,26 @@
 	 */	
 	function do_action_update() {
 		
-		$options = array( 
+		$updated = false;
+		
+		// Update defaults
+		$defaults = array( 
 			'default_tmppath' ,
 			'default_updater' ,
 			'default_status' ,
 		);
-		$updated = false;
-	
-		foreach( $options as $this_option ) {
-			
+		foreach( $defaults as $this_option ) {
 			if ( isset( $_POST[ $this_option ] ) && !empty( $_POST[ $this_option ] ) ) {
-				
 				$this->$this_option = rtrim( $_POST[ $this_option ] , '/' );
-				update_option( 'updatez_' . $this_option , $this->$this_option );
-				
-				$updated = true;
-			}			
+				$updated = ( update_option( 'updatez_' . $this_option , $this->$this_option ) ) ? true : $updated ;
+			} 	
 		}
 		
-		$result = ( $updated ) ? array( 'success'=>'Updates applies.' ) : array( 'warning'=>'No updates to apply.' ) ; 
+		$frontend = ( isset( $_POST[ 'frontend' ] ) ) ? true : false ; 
+		$updated = ( update_option( 'updatez_frontend' , $frontend ) ) ? true : $updated ;
+
+		$result = ( $updated ) ? array( 'success'=>'Updates applied.' ) : array( 'warning'=>'No updates to apply.' ) ; 
+		$result['info'] = var_export( $_POST , true);
 		return $result;
 	}
 
@@ -911,40 +932,6 @@
 	}
 
 	/**
-	/* Show the status on a page, under the content.
-	/* 
-	 * @since  1.0
-	 * @access public
-	 * @return void
-	 */	
-	function showstatus( $content ) {
-	
-		// Status is only shown on dev devng test and testng.
-		if ( 'development' !== WP_ENV) return $content;
-		
-		$append = '';
-		
-		// No status - no show
-		$status = get_post_meta( get_the_ID() , 'updatez_status' , true );
-		if ( empty( $status ) ) return $content;
-		$updater = get_post_meta( get_the_ID() , 'updatez_updater' , true );
-		$comments = get_post_meta( get_the_ID() , 'updatez_comment' , true );
-		
-		//if ( array_key_exists ( $status , $this->panel_class ) ) $class = $this->panel_class->$status;
-		$class='panel-danger';
-
-		$update = '<div class="clearfix"></div>';
-		$update .= '<div class="panel ' . $this->panel_class[$status] . '">';
-		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
-		$update .= '<div class="panel-body">';
-		$update .= "Updater: " . $updater . "<br>\n";
-		$update .= "Comments: " . $comments;
-		$update .= '</div></div>';
-		
-		return $content  . $update;
-	}
-
-	/**
 	/* Show a custom column on the All Pages admin screen
 	/* 
 	 * @since  1.1
@@ -1093,7 +1080,7 @@
 	 * @return void
 	 */	
 	function get_options() {
-		
+		$this->frontend = get_option( 'updatez_frontend' , $this->default_frontend );
 		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
 		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
 		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
@@ -1295,5 +1282,41 @@
 		}
 		return $output;
 	} 
+
+	/**
+	/* Show the status on a page, under the content.
+	/* 
+	 * @since  1.0
+	 * @access public
+	 * @return void
+	 */	
+	function showstatus( $content ) {
+	
+		// Get Options
+		$this->get_options();
+
+		// Status is only shown on dev devng test and testng.
+		$update = '';
+		if ( ( 'development' !== WP_ENV ) || ( !( $this->frontend ) ) ) return $content;
+		
+		// No status - no show
+		$status = get_post_meta( get_the_ID() , 'updatez_status' , true );
+		if ( empty( $status ) ) return $content;
+		$updater = get_post_meta( get_the_ID() , 'updatez_updater' , true );
+		$comments = get_post_meta( get_the_ID() , 'updatez_comment' , true );
+		
+		//if ( array_key_exists ( $status , $this->panel_class ) ) $class = $this->panel_class->$status;
+		$class='panel-danger';
+
+		$update .= '<div class="clearfix"></div>';
+		$update .= '<div class="panel ' . $this->panel_class[$status] . '">';
+		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
+		$update .= '<div class="panel-body">';
+		$update .= "Updater: " . $updater . "<br>\n";
+		$update .= "Comments: " . $comments;
+		$update .= '</div></div>';
+		
+		return $content  . $update;
+	}
 }
 ?>
