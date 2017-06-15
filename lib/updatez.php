@@ -88,14 +88,7 @@
 	 * @var    string
 	 */	 
 	public $tmpurl;
-	
-	/**
-	 * Name of temporary export csv file.
-	 *
-	 * @var    string
-	 */	 
-	public $export_fname;	
-	
+		
 	/**
 	 * CSV field names in import/export file
 	 *
@@ -118,6 +111,13 @@
 	public $statuz;
 	
 	/**
+	 * $_GET['statuz']
+	 *
+	 * @var    string
+	 */	 
+	public $actions;
+	
+	/**
 	 * Public constructor method to prevent a new instance of the object.
 	 *
 	 * @since  1.0.0
@@ -126,7 +126,6 @@
 	 */	
 	public function __construct() {
 		
-		//register_activation_hook( __FILE__, '$this->activate' );
 		register_activation_hook( __FILE__, array( 'updatez', 'activate' ) );
 		//register_deactivation_hook( __FILE__, 'deactivate' );
 		
@@ -135,6 +134,9 @@
 		    define( 'WP_ENV' , 'production' );
 		}
 			
+		//date_default_timezone_set('America/New_York');
+		date_default_timezone_set('UTC');
+		
 		/********************************************************************************/
 		/*********** FILTERS AND ACTIONS ************************************************/
 		/********************************************************************************/
@@ -204,9 +206,16 @@
 		$this->statuz = "statuz";
 		$this->all_users = get_users( 'orderby=nicename' );
 		
+		// SETTINGS PAGES ACTIONS
+		$this->actions = array(
+			'overview'=>array( ),
+			'settings'=>array( 'update' , 'nuclear' , 'notify' ),
+			'import'=>array( 'import' ),
+			'export'=>array(  ),
+		);
+		
 		// IMPORT EXPORT
-		$this->export_fname = sanitize_title( home_url( ) ) . '-update-export.csv';
-		$this->tmpurl = '/wp-tmp/';							// TEMP FILE LOCATION
+		$this->tmpurl = '/wp-tmp';							// TEMP FILE LOCATION
 		$this->csv_fields = array("ID", 
 			"Title",
 			"Edit",
@@ -253,12 +262,13 @@
 	function create_admin_menu() {
 		
 		// Add Dashboard Page and Main Menu item
-		add_menu_page(   'Status Updates' , 'Status Updates' , 'edit_posts' , 'idies-status-menu', array( $this , 'show_overview_page' ) ,'dashicons-yes' );
+		add_menu_page(   'Status Updates' , 'Status Updates' , 'edit_posts' , 'idies-status-menu', array( $this , 'show_page_overview' ) ,'dashicons-yes' );
 		
 		// Add subpages to the main menu. Note that the Overview page re-uses the Main page slug, which avoids a duplicate subpage for the main page
-		add_submenu_page('idies-status-menu' , 'Status Updates Overview',      'Overview',      'edit_posts',         'idies-status-menu',     array( $this , 'show_overview_page' ) );
-		add_submenu_page('idies-status-menu' , 'Status Updates Settings',      'Settings',      'edit_theme_options', 'idies-status-settings', array( $this , 'show_settings_page' ) );
-		add_submenu_page('idies-status-menu' , 'Status Updates Import/Export', 'Import/Export', 'edit_theme_options', 'idies-status-import',   array( $this , 'show_import_page' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Overview',      'Overview',      'edit_posts',         'idies-status-menu',     array( $this , 'show_page_overview' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Settings',      'Settings',      'edit_theme_options', 'idies-status-settings', array( $this , 'show_page_settings' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Import', 'Import', 'edit_theme_options', 'idies-status-import',   array( $this , 'show_page_import' ) );
+		add_submenu_page('idies-status-menu' , 'Status Updates Export', 'Export', 'edit_theme_options', 'idies-status-export',   array( $this , 'show_page_export' ) );
 		
 	}
 
@@ -269,36 +279,57 @@
 	 * @access public
 	 * @return void
 	 */	
-	function show_overview_page() {
+	function show_page_overview() {
 		
 		if ( !current_user_can( 'edit_posts' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 		
-		// Go through pages and get summary of page status vs update status,
-		// and user vs update status.
-		$summary = $this->get_summary();
-
 		$result = '';
+		$this_page = 'overview';
 		
+		// Go through pages and get summary of update statuses.
+		$summary = $this->get_summary();
+		
+		// Get and Do the Action, if there is one
+		$messages = $this->do_action( $this_page );
+		
+		// Show Dashboard Notice ( notice-error, -success, -info, or -warning )
+		foreach ($messages as $thiskey=>$thisvalue) {
+			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+		}
+		/*/
+		$result .= '<pre>';
+		$result .= var_export( $messages , true );
+		$result .= '</pre>';
+		/*/
+				
 		$result .= '<div class="wrap">';
-		$result .=  '<h1>Overview</h1>';
+		$result .= '<h1>Overview</h1>';
+		
+		/*/
+		// Actions go in this form.
+		$result .= '<form method="post" action="">';
+		$result .= '<input type="hidden" name="update" value="update">';
+		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
+		$result .= '</form>';
+		/*/
 		
 		/* PAGES */
-		$result .=  '<h2>Pages</h2>';
-		$result .=  '<table class="form-table">';
-		$result .=  '<thead>';
-		$result .=  '<tr>';
-		$result .=  '<th>&nbsp;</th>';
-		foreach( $this->post_status as $this_page_status ) $result .=  '<th>' . ucfirst( $this_page_status ) . '</th>';
-		$result .=  '</tr>';
-		$result .=  '</thead>';
-		$result .=  '<tbody>';
+		$result .= '<h2>Pages</h2>';
+		$result .= '<table class="form-table">';
+		$result .= '<thead>';
+		$result .= '<tr>';
+		$result .= '<th>&nbsp;</th>';
+		foreach( $this->post_status as $this_page_status ) $result .= '<th>' . ucfirst( $this_page_status ) . '</th>';
+		$result .= '</tr>';
+		$result .= '</thead>';
+		$result .= '<tbody>';
 		foreach( $this->statuses as $this_update_status ) {
-			$result .=  '<tr>';
-			$result .=  '<th scope="row">' . $this_update_status . '</th>';
+			$result .= '<tr>';
+			$result .= '<th scope="row">' . $this_update_status . '</th>';
 			foreach( $this->post_status as $this_page_status ) {
-				$result .=  
+				$result .= 
 					'<td>' . 
 					'<a href="/wp-admin/edit.php?post_type=page' .
 						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . 
@@ -307,29 +338,29 @@
 					'</a>';
 					'</td>';
 			}
-			$result .=  '</tr>';
+			$result .= '</tr>';
 		}
-		$result .=  '</tbody>';
-		$result .=  '</table>';
+		$result .= '</tbody>';
+		$result .= '</table>';
 		
-		$result .=  '<hr width="50%">';
+		$result .= '<hr width="50%">';
 			
 		/* USERS */
-		$result .=  '<h2>Users</h2>';
-		$result .=  '<table class="form-table">';
-		$result .=  '<thead>';
-		$result .=  '<tr>';
-		$result .=  '<th>&nbsp;</th>';
-		foreach( $this->statuses as $this_update_status ) $result .=  '<th>' . $this_update_status . '</th>';
-		$result .=  '</tr>';
-		$result .=  '</thead>';
-		$result .=  '<tbody>';
+		$result .= '<h2>Users</h2>';
+		$result .= '<table class="form-table">';
+		$result .= '<thead>';
+		$result .= '<tr>';
+		$result .= '<th>&nbsp;</th>';
+		foreach( $this->statuses as $this_update_status ) $result .= '<th>' . $this_update_status . '</th>';
+		$result .= '</tr>';
+		$result .= '</thead>';
+		$result .= '<tbody>';
 		foreach( $this->all_users as $this_user ) {
 			if ( !array_key_exists( $this_user->user_nicename , $summary['users'] ) ) continue;
-				$result .=  '<tr>';
-				$result .=  '<th scope="row">' . $this_user->display_name . '</th>';
+				$result .= '<tr>';
+				$result .= '<th scope="row">' . $this_user->display_name . '</th>';
 				foreach( $this->statuses as $this_update_status ) {
-					$result .=  '<td>' . 
+					$result .= '<td>' . 
 					'<a href="/wp-admin/edit.php?post_type=page&all_posts=1' .
 						'&updater=' . $this_user->ID .
 						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . '">' . 
@@ -337,19 +368,11 @@
 					'</a>';
 					'</td>';
 				}
-				$result .=  '</tr>';
+				$result .= '</tr>';
 		}
-		/*/
-		foreach( $summary['users'] as $this_user_slug=>$this_user_summary ) {
-			$result .=  '<tr>';
-			$result .=  '<th scope="row">' . $this_user_slug . '</th>';
-			foreach( $this->statuses as $this_update_status ) $result .=  '<td>' . $summary['users'][ $this_user_slug ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . '</td>';
-			$result .=  '</tr>';
-		}
-		/*/
 	
-		$result .=  '</tbody>';
-		$result .=  '</table>';
+		$result .= '</tbody>';
+		$result .= '</table>';
 		
 		$result .= '</div>';
 		
@@ -363,251 +386,295 @@
 	 * @access public
 	 * @return void
 	 */	
-	function show_settings_page() {
+	function show_page_settings() {
 		
-		$actions = array( 'update' , 'nuclear' , 'import' );
-		$this_page = 'settings';
-
 		if ( !current_user_can( 'edit_theme_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 		
-		$result = array();
-
+		$result = '';
+		$this_page = 'settings';
 		
 		// Get Options
 		$this->get_options();
-
-		// Get and Do the Action 
-		foreach ( $actions as $this_action ) {
-			if ( isset( $_POST[ $this_action ] ) && !empty( $_POST[ $this_action ] ) ) {
-				
-				check_admin_referer( 'save_settings_action' , 'save_settings_nonce' );
-				$result = array_merge( $result , $this->$this_action(  ) );
-				
-			}
+		
+		// Get and Do the Action, if there is one
+		$messages = $this->do_action( $this_page );
+		
+		// Show Dashboard Messages ( notice-error, -success, -info, or -warning )
+		foreach ($messages as $thiskey=>$thisvalue) {
+			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 		}
-		/*/
-		$result = array_merge( $result , 
-			array( "info"=>"defaults: " . 
-				$this->default_updater . ", " .
-				$this->default_status . ", " .
-				$this->default_tmppath ) );
-		/*/
-		
-		// Write the export file each time page is loaded.
-		$this->write_export_data();
-		
-		// More info
-		$update_args = array( 
-			'meta_key' => 'updatez_status' ,
-			'meta_compare' => 'NOT EXISTS' , 
-			'meta_value' => 'foobar' ,
-		);
-		$updated_pages = $this->get_page_updates( $update_args );
-		$completed_args = array( 
-			'meta_key' => 'updatez_status' ,
-			'meta_value' => 'completed' ,
-		);
-		$completed_pages = $this->get_page_updates( $completed_args );
-		
-		// Show the form
-		echo '<div class="wrap">';
-		echo '<h1>Settings</h1>';
-		
-		// Show Dashboard Notice ( notice-error, -success, -info, or -warning )
-		foreach ($result as $thiskey=>$thisvalue) {
-			echo '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
-		}
-		
-		echo '<form method="post" action="">';
-		echo '<input type="hidden" name="options" value="settings">';
-		echo '<input type="hidden" name="update" value="update">';
-		wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' );
-		
-		echo '<table class="form-table">';
-		echo '<tbody>';
 
-		echo '<tr>';
-		echo '<th scope="row">Default Path (Writable dir for temp files)</th>';
-		echo '<td>';
-		echo '<input name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
-		echo '</select>';
-		echo '</td>';
-		echo '</tr>';
+		// Show this Page
+		$result .= '<div class="wrap">';
+		$result .= '<h1>Settings</h1>';
+		
+		$result .= '<form method="post" action="">';
+		$result .= '<input type="hidden" name="update" value="update">';
+		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
+		
+		$result .= '<table class="form-table">';
+		$result .= '<tbody>';
 
-		echo '<tr>';
-		echo '<th scope="row">Default Updater</th>';
-		echo '<td>';
-		echo '<select name="default_updater" id="default-updater">';
+		$result .= '<tr>';
+		$result .= '<th scope="row">Default Path (Writable dir for temp files)</th>';
+		$result .= '<td>';
+		$result .= '<input name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
+		$result .= '</select>';
+		$result .= '</td>';
+		$result .= '</tr>';
+
+		$result .= '<tr>';
+		$result .= '<th scope="row">Default Updater</th>';
+		$result .= '<td>';
+		$result .= '<select name="default_updater" id="default-updater">';
 		foreach ( $this->all_users as $thisuser ) {
-			echo '<option value="' . $thisuser->user_nicename . '"' . selected( $this->default_updater , $thisuser->user_nicename ) . '>' . $thisuser->display_name . '</option>';
+			$result .= '<option value="' . $thisuser->user_nicename . '"' . selected( $this->default_updater , $thisuser->user_nicename , false ) . '>' . $thisuser->display_name . '</option>';
 		}
-		echo '</select>';
-		echo '</td>';
-		echo '</tr>';
+		$result .= '</select>';
+		$result .= '</td>';
+		$result .= '</tr>';
 
 		
-		echo '<tr>';
-		echo '<th scope="row">Default Status</th>';
-		echo '<td>';
-		echo '<select name="default_status" id="default-status">';
+		$result .= '<tr>';
+		$result .= '<th scope="row">Default Status</th>';
+		$result .= '<td>';
+		$result .= '<select name="default_status" id="default-status">';
 		foreach ( $this->statuses as $thiskey => $thisvalue ) {
-			echo '<option value="' . $thiskey . '"' . selected( $this->default_status , $thiskey ) . '>' . $thisvalue. '</option>';
+			$result .= '<option value="' . $thiskey . '"' . selected( $this->default_status , $thiskey , false ) . '>' . $thisvalue. '</option>';
 		}
-		echo '</select>';
-		echo '</td>';
-		echo '</tr>';
+		$result .= '</select>';
+		$result .= '</td>';
+		$result .= '</tr>';
 		
-		echo '</tbody>';
-		echo '</table>';
-		echo '<input type="submit" name="submit" id="submit" class="button button-primary" value="Update Settings">';
-		echo '</form>';
+		$result .= '<tr>';
+		$result .= '<th scope="row">Update Settings</th>';
+		$result .= '<td><input type="submit" name="submit" id="submit" class="button button-primary" value="Update"></td>';
+		$result .= '</tr>';
+		
+		$result .= '<tr>';
+		$result .= '<th scope="row">Reset All Pages to Defaults<br></th>';
+		$result .= '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Reset</button></td>';
+		$result .= '</tr>';
+	
+		$result .= '</tbody>';
+		$result .= '</table>';
+		$result .= '</form>';				
 
-		echo '<form method="post" action="" enctype="multipart/form-data">';
-		wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' );
-		echo '<table class="form-table">';
-		echo '<tbody>';
+		$result .= '</tbody>';
+		$result .= '</table>';
+		$result .= '</form>';
+		$result .= '</div>';
 
-		echo '<tr>';
-		echo '<th scope="row">Export Page Updates as CSV...</th>';
-		echo '<td><a class="button button-secondary" href="' . $this->tmpurl . $this->export_fname . '">Export</a></td>';
-		echo '<td><em>Export to CSV file to update Status, Updater, and Comments of multiple pages manually.</em></td>';
-		echo '</tr>';
-
-		echo '<tr>';
-		echo '<th scope="row" rowspan="2">Import Page Updates CSV...</th>';
-		echo '<td colspan="2"><input type="file" name="importfile" id="importfile" class="widefat"></td>';
-		echo '</tr>';
-		echo '<tr>';
-		echo '<td><button type="submit" class="button button-primary" id="import" name="import" value="import">Import</button></td>';
-		echo '<td scope="row"><em>N.b. you can only update the <strong>Updater</strong>, <strong>Status</strong>, ' . 
-			 'and/or <strong>Comments</strong> with CSV import. All other columns are ignored (but ' .
-			 'column titles and order must match CSV Export file). ' .
-			 'Also, the <strong>Updater</strong> must be a WordPress login for a valid user ' .
-			 '(e.g. bsouter), not a display name (e.g. Bonnie Souter). You can find users\' login ' . 
-			 'names on <a href="/wp-admin/users.php">All Users</a>.</em></td>';
-		echo '</tr>';
-				
-		echo '<tr>';
-		echo '<th scope="row">Nuclear Option: <br></th>';
-		echo '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Go Nuclear</button></td>';
-		echo '<td><em>Reset all pages\' to default status, updater, and delete comments.</em></td>';
-		echo '</tr>';
-
-		echo '</tbody>';
-		echo '</table>';
-		echo '</form>';
-		echo '</div>';
-
-		return;
+		echo $result;
 	}
 
 	/**
-	/* Show the Dashboard IMPORT/EXPORT Page
+	/* Show the Dashboard IMPORT Page
 	/* 
 	 * @since  1.4
 	 * @access public
 	 * @return void
 	 */	
-	function show_import_page() {
+	function show_page_import() {
 		
 		if ( !current_user_can( 'edit_theme_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 		
-		$actions = array( 'import' );
-		
 		$result = '';
+		$this_page = 'import';
 		
+		// Get and Do the Action, if there is one
+		$messages = $this->do_action( $this_page );
+		
+		// Show Dashboard Messages ( notice-error, -success, -info, or -warning )
+		foreach ($messages as $thiskey=>$thisvalue) {
+			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+		}
+
+		// Show this Page		
 		$result .= '<div class="wrap">';
-		$result .=  '<h1>Import/Export</h1>';
+		$result .= '<h1>Import Update Statuses</h1>';
+		$result .= '<form method="post" action="" enctype="multipart/form-data">';
+		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
+		$result .= '<table class="form-table">';
+		$result .= '<tbody>';
+
+		$result .= '<tr>';
+		$result .= '<th scope="row" rowspan="2">Import Page Updates CSV...</th>';
+		$result .= '<td colspan="2"><input type="file" name="importfile" id="importfile" class="widefat"></td>';
+		$result .= '</tr>';
+		$result .= '<tr>';
+		$result .= '<td><button type="submit" class="button button-primary" id="import" name="import" value="import">Import</button></td>';
+		$result .= '<td scope="row"><em>N.b. you can only update the <strong>Updater</strong>, <strong>Status</strong>, ' . 
+			 'and/or <strong>Comments</strong> with CSV import. All other columns are ignored (but ' .
+			 'column titles and order must match CSV Export file). ' .
+			 'Also, the <strong>Updater</strong> must be a WordPress login for a valid user ' .
+			 '(e.g. bsouter), not a display name (e.g. Bonnie Souter). You can find users\' login ' . 
+			 'names on <a href="/wp-admin/users.php">All Users</a>.</em></td>';
+		$result .= '</tr>';
+				
+		$result .= '</tbody>';
+		$result .= '</table>';
+		$result .= '</form>';
 		$result .= '</div>';
 		
 		echo $result;
 	}
 
 	/**
-	// Get All Pages 
+	/* Show the Dashboard EXPORT Page
 	/* 
-	 * @since  1.1
+	 * @since  1.4
 	 * @access public
 	 * @return void
 	 */	
-	function get_pages( $post_object = null , $return = false ) {
-		global $post;
+	function show_page_export() {
 		
-		// Get or Set query variables
-		$args = array(
-			'posts_per_page' => -1,
-			'post_type' => $this->post_type,
-			'post_status' => implode( ',' , $this->post_status ),
-		); 
-		$the_pages = get_posts( $args );
+		if ( !current_user_can( 'edit_posts' ) )  {
+			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+		}
 		
-		if ( $return ) return $the_pages;
+		$result = '';
+		$this_page = 'export';
 		
-		$this->all_pages = $the_pages;
-		return;
+		// Write the export file each time page is loaded.
+		$fname = $this->write_export_data();
+		
+		// Get and Do the Action, if there is one
+		$messages = $this->do_action( $this_page );
+		
+		// Show Dashboard Messages ( notice -error, -success, -info, or -warning )
+		if ( !empty( $messages ) ) {
+			foreach ( $messages as $thiskey=>$thisvalue ) {
+				$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+			}
+		}
+		/*/
+		while ( $this_message = array_shift( $messages ) {
+			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
+		}
+		/*/
+				
+		$result .= '<div class="wrap">';
+		$result .= '<h1>Export Page Update Status</h1>';
+		$result .= '<form method="post" action="" enctype="multipart/form-data">';
+		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
+		$result .= '<table class="form-table">';
+		$result .= '<tbody>';
 
+		$result .= '<tr>';
+		$result .= '<th scope="row">Export Page Updates as CSV...</th>';
+		$result .= '<td><a class="button button-secondary" href="' . $this->tmpurl . '/' . $fname . '" >Export</a></td>';
+		$result .= '<td><em>Export to CSV file to update Status, Updater, and Comments of multiple pages manually.</em></td>';
+		$result .= '</tr>';
+				
+		$result .= '</tbody>';
+		$result .= '</table>';
+		$result .= '</form>';
+		$result .= '</div>';
+		
+		echo $result;
 	}
 
 	/**
-	// Get Page Updates 
+	// Do the action on this page`
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function do_action( $this_page = false ) {
+		
+		$messages = array();
+		
+		if ( !array_key_exists( $this_page , $this->actions ) ) {
+			$messages = array_merge( $messages , array( 'error'=>"$this_page not defined." ) );
+			return $messages;
+		}
+		
+		$nothing = true;
+		foreach ( $this->actions[$this_page] as $this_action ) {
+			if ( isset( $_POST[ $this_action ] ) && !empty( $_POST[ $this_action ] ) ) {
+				
+				check_admin_referer( 'save_settings_action' , 'save_settings_nonce' );
+				
+				if ( method_exists( $this , "do_action_$this_action" ) ) {
+					$messages = array_merge( $messages , $this->{"do_action_" . $this_action}(  ) );
+					$nothing=false;
+				} else {
+					$messages = array_merge( $messages , array( 'error'=>"do_action_$this_action() not found." ) );
+				}
+			}
+		}
+		//if ( $nothing ) $messages = array_merge( $messages , array( 'info'=>"Nothing done on $this_page." ) );
+
+		return $messages;
+	}
+
+	/**
+	/* Update/Set plugin options from Updated or Default options
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */	
+	function do_action_update() {
+		
+		$options = array( 
+			'default_tmppath' ,
+			'default_updater' ,
+			'default_status' ,
+		);
+		$updated = false;
+	
+		foreach( $options as $this_option ) {
+			
+			if ( isset( $_POST[ $this_option ] ) && !empty( $_POST[ $this_option ] ) ) {
+				
+				$this->$this_option = rtrim( $_POST[ $this_option ] , '/' );
+				update_option( 'updatez_' . $this_option , $this->$this_option );
+				
+				$updated = true;
+			}			
+		}
+		
+		$result = ( $updated ) ? array( 'success'=>'Updates applies.' ) : array( 'warning'=>'No updates to apply.' ) ; 
+		return $result;
+	}
+
+	/**
+	/* Nuclear option to reset Page updater, status, and comments to defaults
 	/* 
 	 * @since  1.1
 	 * @access public
 	 * @return void
 	 */	
-	function get_page_updates( $newargs = array() ) {
+	function do_action_nuclear() {
 		
-		// Get or Set query variables
-		$paged = isset( $_GET[ 'paged' ] ) ? 											// page 1
-					absint( $_GET[ 'paged' ] ) : 
-					1 ;
-		$orderby = ( isset( $_GET[ 'orderby' ] ) &&  			 						// 'post_title'
-					 in_array( $_GET[ 'orderby' ] ,
-						array( 
-							'title' , 
-							'update-status' , 
-							'page-status' , 
-							'post-modified' , 
-						) ) ) ? 
-					$_GET[ 'orderby' ] : 
-					'title' ;
-		$order = ( isset( $_GET[ 'order' ] ) &&							 				// 'asc'|'desc'
-					 in_array( $_GET[ 'order' ] , 							 				
-						array( 
-							'asc' , 
-							'desc' , 
-						) ) ) ?  
-					$_GET[ 'order' ] : 
-					'asc' ;
-		$updater  = isset( $_GET[ 'updater' ] ) ?										// Show pages assigned to 'all'. 
-					sanitize_text_field( $_GET[ 'updater' ] ) : 
-					'all' ;
-		$number  = isset( $_GET[ 'number' ] ) ? 										// number to show: 20
-					absint( $_GET[ 'number' ] ) : 
-					20 ; 
-		$offset  = isset( $_GET[ 'offset' ] ) ? 							 			// number to skip: 0
-					absint( $_GET[ 'offset' ] ) : 
-					0 ;
-
-		$args = array(
-			'order' => $order,
-			'orderby' => $orderby,
-			'posts_per_page' => -1,
-			'offset' => $offset,
-			'post_type' => $this->post_type,
-			'post_status' => implode( ',' , $this->post_status ),
-		); 
-		foreach ($newargs as $thiskey=>$thisvalue) 
-			$args[$thiskey] = $thisvalue;
+		foreach ( $this->all_pages as $thispage ){
+			update_post_meta( $thispage->ID , 'updatez_status' , $this->default_status ) ;
+			update_post_meta( $thispage->ID , 'updatez_updater' , $this->default_updater ) ;
+			update_post_meta( $thispage->ID , 'updatez_comment' , '' ) ;
+		}
+	
+		$result = array( 'success'=>'All Pages reset.' ) ; 
+		return $result;
+	}		
+	
+	/**
+	/* Notify all users of the pages assigned to them.
+	/* 
+	 * @since  1.1
+	 * @access public
+	 * @return void
+	 */	
+	function do_action_notify() {
 		
-		$my_pages = get_posts( $args );
-		
-		return $my_pages;
-
+		$result = array( 'error'=>'Sorry, "Notify Users" functionality is not implemented yet.' ) ; 
+		return $result;
 	}
 
 	/**
@@ -617,7 +684,7 @@
 	 * @access public
 	 * @return void
 	 */	
-	function import() {
+	function do_action_import() {
 
 		$status = "error";
 		
@@ -659,6 +726,31 @@
 	}		
 
 	/**
+	// Get All Pages 
+	/* 
+	 * @since  1.4
+	 * @access public
+	 * @return void
+	 */		 
+	function get_pages( $post_object = null , $return = false ) {
+		global $post;
+		
+		// Get or Set query variables
+		$args = array(
+			'posts_per_page' => -1,
+			'post_type' => $this->post_type,
+			'post_status' => implode( ',' , $this->post_status ),
+		); 
+		$the_pages = get_posts( $args );
+		
+		if ( $return ) return $the_pages;
+		
+		$this->all_pages = $the_pages;
+		return;
+
+	}
+
+	/**
 	// Write Status Updates CSV export file
 	/* 
 	 * @since  1.1
@@ -670,7 +762,10 @@
 		$output = '';
 		$sep = ',';
 		$quo = '"';
-		$fname = $this->default_tmppath . "/" . $this->export_fname;
+		
+		$fname = sanitize_title( home_url( ) . '-export-' . date('Ymd-Hi') ) . '.csv';
+
+		$fpath = $this->default_tmppath . "/" . $fname;
 
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
 		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
@@ -688,32 +783,13 @@
 		}
 		
 		//write temp file
-		$expfile = fopen( $fname , "w") or die("Unable to create ". $fname ." file.");
+		$expfile = fopen( $fpath , "w") or die("Unable to create ". $fpath ." file.");
 		fwrite($expfile, $output);
 		fclose($expfile);
 		
-	}		
-
-	/**
-	/* Nuclear option to reset Page updater, status, and comments to defaults
-	/* 
-	 * @since  1.1
-	 * @access public
-	 * @return void
-	 */	
-	function nuclear() {
+		return $fname;
 		
-		$all_pages = $this->get_page_updates();
-		foreach ( $all_pages as $thispage ){
-			update_post_meta( $thispage->ID , 'updatez_status' , $this->default_status ) ;
-			update_post_meta( $thispage->ID , 'updatez_updater' , $this->default_updater ) ;
-			update_post_meta( $thispage->ID , 'updatez_comment' , '' ) ;
-		}
-	
-		$result = array( 'success'=>'All Pages reset.' ) ; 
-		return $result;
 	}		
-	
 
 	/**
 	/* Save Meta box Data from Content Editor
@@ -1021,37 +1097,6 @@
 		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
 		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
 		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
-	}
-
-	/**
-	/* Update/Set plugin options from Updated or Default options
-	/* 
-	 * @since  1.4
-	 * @access public
-	 * @return void
-	 */	
-	function update() {
-		
-		$options = array( 
-			'default_tmppath' ,
-			'default_updater' ,
-			'default_status' ,
-		);
-		$updated = false;
-	
-		foreach( $options as $this_option ) {
-			
-			if ( isset( $_POST[ $this_option ] ) && !empty( $_POST[ $this_option ] ) ) {
-				
-				$this->$this_option = rtrim( $_POST[ $this_option ] , '/' );
-				update_option( 'updatez_' . $this_option , $this->$this_option );
-				
-				$updated = true;
-			}			
-		}
-		
-		$result = ( $updated ) ? array( 'success'=>'Updates applies.' ) : array( 'warning'=>'No updates to apply.' ) ; 
-		return $result;
 	}
 
 	/**
