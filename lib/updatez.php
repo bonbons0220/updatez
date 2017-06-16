@@ -719,21 +719,42 @@
 			
 			$body = '';
 			
-			// can't send it if they don't exist
+			// check user exists
 			if ( false !== $thisuser = get_user_by( 'slug' , $slug ) ) {
 				
 				$body .= '<h2>SDSS Page Status Update for ' . $thisuser->display_name . '.</h2>';
+				/*/
+				if ( 'completed' == $this_status_key  && !empty( $this_user_update[ $this_status_key ] ) ){
+					$body .=  '<h3>' . $this->statuses[ $this_status_key ] . '</h3>' . PHP_EOL;
+					$body .=  '<p>You have ' . count( $this->statuses[ $this_status_key ] ) . ' pages that are ' . $this->statuses[ $this_status_key ] . '</p>' . PHP_EOL;
+				}
+				/*/
 				foreach( $this->statuses as $this_status_key => $this_status ) {
 					
 					// No blank notifications
 					if ( empty( $this_user_update[ $this_status_key ] ) ) continue;
-					
+					$body .=  '<h3>' . $this->statuses[ $this_status_key ] . '</h3>' . PHP_EOL;
+					$body .=  '<p>You are assigned to ' . count( $this->statuses[ $this_status_key ] ) . ' pages that are ' . $this->statuses[ $this_status_key ] . '</p>' . PHP_EOL;
+					switch ($this_status_key ) {
+						case 'completed' :
+							break;
+						case 'do-not-publish' :
+							$body .=  '<p>Please ensure that all these pages are not Published, and that there are no links to these pages from other published pages. These pages should be either Private or Drafts.</p>' . PHP_EOL;
+						default:
+							$body .=  "<ul>" . PHP_EOL;
+							foreach ( $this_user_update[ $this_status_key ] as $thispage ) {
+								$body .=  '<li><a href="' . get_the_permalink( $thispage ) . '">' . get_the_title( $thispage ) . '</a></li>' . PHP_EOL;
+							}
+							$body .=  "</ul>" . PHP_EOL;
+					}
+					/*/					
 					$body .=  '<h3>Your Pages that are ' . $this_status . '</h3>' . PHP_EOL;
 					$body .=  "<ul>" . PHP_EOL;
 					foreach ( $this_user_update[ $this_status_key ] as $thispage ) {
 						$body .=  '<li><a href="' . get_the_permalink( $thispage ) . '">' . get_the_title( $thispage ) . '</a></li>' . PHP_EOL;
 					}
 					$body .=  "</ul>" . PHP_EOL;
+					/*/
 				}
 				//$success = wp_mail( $thisuser->user_email , $subject , $body, $headers);
 				//if ( wp_mail( 'bonbons0220@gmail.com' , $subject , $body, $headers) )
