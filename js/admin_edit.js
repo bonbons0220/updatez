@@ -24,11 +24,11 @@
 			var $post_row = $( '#post-' + $post_id );
 
 			// get the data
-			var $update_reviewer = $( '.column-update_reviewer span.lookup.hidden', $post_row ).text();
+			var $update_updater = $( '.column-update_updater span.lookup.hidden', $post_row ).text();
 			var $update_status =   $( '.column-update_status span.lookup.hidden', $post_row ).text();
 
 			// populate the data
-			$( ':input[name="update_reviewer"]', $edit_row ).val( $update_reviewer );
+			$( ':input[name="update_updater"]', $edit_row ).val( $update_updater );
 			$( ':input[name="update_status"]', $edit_row ).val( $update_status );
 		}
 	};

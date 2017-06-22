@@ -1,4 +1,4 @@
-<?php 
+3<?php 
 /**
  * Updatez WordPress plug-in tracks update status of pages.
  *
@@ -27,7 +27,7 @@
 	public $statuses;
 	
 	/**
-	 * Array of Panel class values to display Status on Frontend.
+	 * Array of Panel class values to display Status on page
 	 *
 	 * @var    array
 	 */
@@ -43,9 +43,16 @@
 	/**
 	 * Default page updater.
 	 *
-	 * @var    string
+	 * @var    object
 	 */
 	public $default_updater;
+	
+	/**
+	 * Initial page updater for new pages and nuclear option.
+	 *
+	 * @var    object
+	 */
+	public $updater;
 	
 	/**
 	 * Default page status.
@@ -55,23 +62,37 @@
 	public $default_status;
 
 	/**
-	 * Name of directory to hold temporary files.
+	 * Initial page status for new pages and nuclear option.
+	 *
+	 * @var    string
+	 */
+	public $status;
+
+	/**
+	 * Default directory to hold temporary files.
 	 *
 	 * @var    string
 	 */	 
 	public $default_tmppath;
 	
 	/**
-	 * Default for Show status on front end
+	 * Name of directory to hold temporary files.
 	 *
 	 * @var    string
+	 */	 
+	public $tmppath;
+	
+	/**
+	 * Default for Show status on front end
+	 *
+	 * @var    boolean
 	 */	 
 	public $default_frontend;
 	
 	/**
 	 * Show status on front end
 	 *
-	 * @var    string
+	 * @var    boolean
 	 */	 
 	public $frontend;
 	
@@ -115,14 +136,14 @@
 	 *
 	 * @var    string
 	 */	 
-	public $updater;
+	public $get_updater;
 	
 	/**
 	 * $_GET['statuz']
 	 *
 	 * @var    string
 	 */	 
-	public $statuz;
+	public $get_statuz;
 	
 	/**
 	 * $_GET['statuz']
@@ -130,6 +151,20 @@
 	 * @var    string
 	 */	 
 	public $actions;
+	
+	/**
+	 * Default for whether to Preview or Send Emails
+	 *
+	 * @var    boolean
+	 */	 
+	public $default_preview_emails;
+	
+	/**
+	 * Flag for whether to preview or send emails
+	 *
+	 * @var    boolean
+	 */	 
+	public $preview_emails;
 	
 	/**
 	 * Public constructor method to prevent a new instance of the object.
@@ -155,7 +190,7 @@
 		/*********** FILTERS AND ACTIONS ************************************************/
 		/********************************************************************************/
 		// FRONT END STATUS
-		add_filter( 'the_content' , array($this , 'showstatus' ) );
+		add_filter( 'the_content' , array( $this , 'showstatus' ) );
 		
 		// DASHBOARD PAGES
 		add_action( 'admin_menu' , array( $this , 'create_admin_menu' ) );
@@ -179,17 +214,20 @@
 		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
 		
 		//                  FILTERING OPTIONS
-		add_filter( 'posts_where' , array($this , 'posts_where' ) );
-		add_action( 'restrict_manage_posts' , array($this , 'add_filter_options' ) );
+		add_filter( 'posts_where' , array( $this , 'posts_where' ) );
+		add_action( 'restrict_manage_posts' , array( $this , 'add_filter_options' ) );
 
 		/********************************************************************************/
 		/*********** VARIABLES **********************************************************/
 		/********************************************************************************/
+		
 		// DEFAULTS
+		$this->default_preview_emails=true;
 		$this->default_frontend = true;
-		$this->default_updater = 'bsouter';
+		$this->default_updater = false;
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		
 		$this->meta_fields = array( 
 			'updatez_status',
 			'updatez_updater',
@@ -199,6 +237,7 @@
 		$this->post_status  = array( 
 			'publish',
 			'private',
+			'trash',
 			'draft') ;
 			
 		$this->statuses = array(
@@ -217,8 +256,8 @@
 		);
 		
 		// _GET VARS FOR ALL PAGES
-		$this->updater = "updater";
-		$this->statuz = "statuz";
+		$this->get_updater = "updater";
+		$this->get_statuz = "statuz";
 		
 		$this->all_users = get_users( 'orderby=nicename' );
 		
@@ -255,6 +294,8 @@
 			$the_user = get_users( array('role'=>'edit_theme_options' , 'number'=>1 , 'orderby'=>'ID' ) );
 			$this->default_updater = $the_user->user_nicename;
 		}
+
+		$this->default_status = ( in_array( $this->default_status , $this->statuses ) ) ? $this->default_status : $this->statuses[ 0 ] ;
 
 		// Make sure each page has a statuses that is defined, and an updater who is a user in the system.
 		foreach ( $this->all_pages as $thispage ){
@@ -314,43 +355,31 @@
 		foreach ($messages as $thiskey=>$thisvalue) {
 			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 		}
-		/*/
-		$result .= '<pre>';
-		$result .= var_export( $messages , true );
-		$result .= '</pre>';
-		/*/
 				
 		$result .= '<div class="wrap">';
 		$result .= '<h1>Overview</h1>';
-		
-		/*/
-		// Actions go in this form.
-		$result .= '<form method="post" action="">';
-		$result .= '<input type="hidden" name="update" value="update">';
-		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
-		$result .= '</form>';
-		/*/
-		
+				
 		/* PAGES */
+		$result .= '<hr>';
 		$result .= '<h2>Pages</h2>';
 		$result .= '<table class="form-table">';
 		$result .= '<thead>';
 		$result .= '<tr>';
 		$result .= '<th>&nbsp;</th>';
-		foreach( $this->post_status as $this_page_status ) $result .= '<th>' . ucfirst( $this_page_status ) . '</th>';
+		foreach( $this->statuses as $this_update_status ) $result .= '<th>' . $this_update_status . '</th>';
 		$result .= '</tr>';
 		$result .= '</thead>';
 		$result .= '<tbody>';
-		foreach( $this->statuses as $this_update_status ) {
+		foreach( $this->post_status as $this_page_status ) {
 			$result .= '<tr>';
-			$result .= '<th scope="row">' . $this_update_status . '</th>';
-			foreach( $this->post_status as $this_page_status ) {
+			$result .= '<th scope="row">' . ucfirst($this_page_status) . '</th>';
+			foreach( $this->statuses as $this_update_key=>$this_update_status ) {
 				$result .= 
 					'<td>' . 
 					'<a href="/wp-admin/edit.php?post_type=page' .
-						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . 
+						'&statuz=' . $this_update_key . 
 						'&post_status=' . $this_page_status . '">' . 
-					$summary['pages'][ $this_page_status ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . 
+					$summary['pages'][ $this_page_status ][ $this_update_key ] . 
 					'</a>';
 					'</td>';
 			}
@@ -359,7 +388,7 @@
 		$result .= '</tbody>';
 		$result .= '</table>';
 		
-		$result .= '<hr width="50%">';
+		$result .= '<hr>';
 			
 		/* USERS */
 		$result .= '<h2>Users</h2>';
@@ -378,7 +407,7 @@
 				foreach( $this->statuses as $this_update_status ) {
 					$result .= '<td>' . 
 					'<a href="/wp-admin/edit.php?post_type=page&all_posts=1' .
-						'&updater=' . $this_user->ID .
+						'&updater=' . $this_user->user_nicename .
 						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . '">' . 
 					$summary['users'][ $this_user->user_nicename ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . 
 					'</a>';
@@ -389,6 +418,8 @@
 	
 		$result .= '</tbody>';
 		$result .= '</table>';
+
+		$result .= '<hr>';
 		
 		$result .= '</div>';
 		
@@ -424,8 +455,10 @@
 
 		// Show this Page
 		$result .= '<div class="wrap">';
-		$result .= '<h1>Settings</h1>';
+		$result .= '<h1>Settings and Utilities</h1>';
 		
+		$result .= '<hr>';
+		$result .= '<h2>Settings</h2>';
 		$result .= '<form method="post" action="">';
 		$result .= '<input type="hidden" name="update" value="update">';
 		$result .= wp_nonce_field( 'save_settings_action' , 'save_settings_nonce' , false );
@@ -441,18 +474,25 @@
 		$result .= '</tr>';
 
 		$result .= '<tr>';
+		$result .= '<th scope="row">Preview Reminder Emails</th>';
+		$result .= '<td>';
+		$result .= '<input type="checkbox" name="preview_emails" value="true" id="preview_emails" ' . checked( $this->preview_emails , true , false ) . ' >';
+		$result .= '</td>';
+		$result .= '</tr>';
+
+		$result .= '<tr>';
 		$result .= '<th scope="row">Default Path (Writable dir for temp files)</th>';
 		$result .= '<td>';
-		$result .= '<input type="text" name="default_tmppath" id="default-tmppath" value="' . $this->default_tmppath . '" >';
+		$result .= '<input type="text" name="tmppath" id="tmppath" value="' . $this->tmppath . '" >';
 		$result .= '</td>';
 		$result .= '</tr>';
 
 		$result .= '<tr>';
 		$result .= '<th scope="row">Default Updater</th>';
 		$result .= '<td>';
-		$result .= '<select name="default_updater" id="default-updater">';
+		$result .= '<select name="updater" id="updater">';
 		foreach ( $this->all_users as $thisuser ) {
-			$result .= '<option value="' . $thisuser->user_nicename . '"' . selected( $this->default_updater , $thisuser->user_nicename , false ) . '>' . $thisuser->display_name . '</option>';
+			$result .= '<option value="' . $thisuser->user_nicename . '"' . selected( $this->updater , $thisuser->user_nicename , false ) . '>' . $thisuser->display_name . '</option>';
 		}
 		$result .= '</select>';
 		$result .= '</td>';
@@ -462,9 +502,9 @@
 		$result .= '<tr>';
 		$result .= '<th scope="row">Default Status</th>';
 		$result .= '<td>';
-		$result .= '<select name="default_status" id="default-status">';
+		$result .= '<select name="status" id="status">';
 		foreach ( $this->statuses as $thiskey => $thisvalue ) {
-			$result .= '<option value="' . $thiskey . '"' . selected( $this->default_status , $thiskey , false ) . '>' . $thisvalue. '</option>';
+			$result .= '<option value="' . $thiskey . '"' . selected( $this->status , $thiskey , false ) . '>' . $thisvalue. '</option>';
 		}
 		$result .= '</select>';
 		$result .= '</td>';
@@ -475,22 +515,30 @@
 		$result .= '<td><input type="submit" name="submit" id="submit" class="button button-primary" value="Update"></td>';
 		$result .= '</tr>';
 		
+		$result .= '</tbody>';
+		$result .= '</table>';
+
+		$result .= '<hr>';
+		$result .= '<h2>Utilities</h2>';
+
+		$result .= '<table class="form-table">';
+		$result .= '<tbody>';
 		$result .= '<tr>';
 		$result .= '<th scope="row">Reset All Pages to Defaults</th>';
 		$result .= '<td><button class="button button-secondary" id="nuclear" name="nuclear" value="nuclear">Reset</button></td>';
 		$result .= '</tr>';
 	
 		$result .= '<tr>';
-		$result .= '<th scope="row">Email Page Update Statuses to Updaters</th>';
-		$result .= '<td><button class="button button-secondary" id="notify" name="notify" value="notify">Send the Emails</button></td>';
+		$result .= '<th scope="row">Send Reminder Emails to Updaters</th>';
+		$btntxt = ( $this->preview_emails ) ? 'Preview the Emails' : 'Send the Emails' ; 
+		$result .= '<td><button class="button button-secondary" id="notify" name="notify" value="notify">' . $btntxt . '</button></td>';
 		$result .= '</tr>';
 	
 		$result .= '</tbody>';
 		$result .= '</table>';
-		$result .= '</form>';				
+		
+		$result .= '<hr>';
 
-		$result .= '</tbody>';
-		$result .= '</table>';
 		$result .= '</form>';
 		$result .= '</div>';
 
@@ -579,11 +627,6 @@
 				$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
 			}
 		}
-		/*/
-		while ( $this_message = array_shift( $messages ) {
-			$result .= '<div class="notice notice-' . $thiskey . ' is-dismissible">' . $thisvalue . '</div>';
-		}
-		/*/
 				
 		$result .= '<div class="wrap">';
 		$result .= '<h1>Export Page Update Status</h1>';
@@ -610,10 +653,10 @@
 	// Deal with action requested for dashboard page`
 	/* 
 	 * @since  1.4
-	 * @access public
+	 * @access private
 	 * @return void
 	 */	
-	function do_action( $this_page = false ) {
+	private function do_action( $this_page = false ) {
 		
 		$messages = array();
 		
@@ -640,49 +683,58 @@
 	}
 
 	/**
-	/* Update/Set plugin options from Updated or Default options
+	/* Update plugin options
 	/* 
 	 * @since  1.4
-	 * @access public
+	 * @access private
 	 * @return void
 	 */	
-	function do_action_update() {
+	private function do_action_update() {
 		
 		$updated = false;
+		$result = array( ); 
 		
-		// Update defaults
-		$defaults = array( 
-			'default_tmppath' ,
-			'default_updater' ,
-			'default_status' ,
+		//debug
+		//$result = array( 'info'=>var_export( $_POST , true ) ); 
+		
+		// Text and Select form Input fields
+		$inputs = array( 
+			'tmppath' ,
+			'updater' ,
+			'status' ,
 		);
-		foreach( $defaults as $this_option ) {
+		foreach( $inputs as $this_option ) {
 			if ( isset( $_POST[ $this_option ] ) && !empty( $_POST[ $this_option ] ) ) {
 				$this->$this_option = rtrim( $_POST[ $this_option ] , '/' );
 				$updated = ( update_option( 'updatez_' . $this_option , $this->$this_option ) ) ? true : $updated ;
 			} 	
 		}
 		
-		$frontend = ( isset( $_POST[ 'frontend' ] ) ) ? true : false ; 
-		$updated = ( update_option( 'updatez_frontend' , $frontend ) ) ? true : $updated ;
+		$checks = array( 
+			'frontend' ,
+			'preview_emails' ,
+		);
+		foreach( $checks as $this_option ) {
+			$this->$this_option = ( isset( $_POST[ $this_option ] ) ) ? true : false ; 
+			$updated = ( update_option( 'updatez_' . $this_option , $this->$this_option ) ) ? true : $updated ;
+		}
 
-		$result = ( $updated ) ? array( 'success'=>'Updates applied.' ) : array(  ) ; 
-		//$result['info'] = var_export( $_POST , true);
+		$result = ( $updated ) ? array_merge( $result , array( 'success'=>'Settings updated.' ) ) : $result ;
 		return $result;
 	}
 
 	/**
-	/* Nuclear option to reset Page updater, status, and comments to defaults
+	/* Nuclear option to reset Page updater, status, and comments to initial values
 	/* 
 	 * @since  1.1
-	 * @access public
+	 * @access private
 	 * @return void
 	 */	
-	function do_action_nuclear() {
+	private function do_action_nuclear() {
 		
 		foreach ( $this->all_pages as $thispage ){
-			update_post_meta( $thispage->ID , 'updatez_status' , $this->default_status ) ;
-			update_post_meta( $thispage->ID , 'updatez_updater' , $this->default_updater ) ;
+			update_post_meta( $thispage->ID , 'updatez_status' , $this->status ) ;
+			update_post_meta( $thispage->ID , 'updatez_updater' , $this->updater ) ;
 			update_post_meta( $thispage->ID , 'updatez_comment' , '' ) ;
 		}
 	
@@ -693,26 +745,30 @@
 	/**
 	/* Notify all users of the pages assigned to them.
 	/* 
-	 * @since  1.1
-	 * @access public
-	 * @return void
+	 * @since  1.4
+	 * @access private
+	 * @return array( string=>string )
 	 */	
-	function do_action_notify() {
+	private function do_action_notify() {
+		
+		$message = '';
+		
 		$result = array();
 		$sent = 0;
 		$notsent = 0;
-		
+				
+		$thisupdater = get_user_by( 'slug' , $this->updater ); 
+					
 		//Need to override the default 'text/plain' content type to send a HTML email.
-		add_filter('wp_mail_content_type', array($this, 'override_mail_content_type'));
+		add_filter('wp_mail_content_type', array( $this, 'override_mail_content_type'));
 
 		// Get the list of pages of each update status for each user
 		$user_updates = $this->get_user_updates();
-		//$all_bodies = '';
 		
 		//Let auto-responders and similar software know this is an auto-generated email
 		//that they shouldn't respond to.
-		$headers = array('Auto-Submitted: auto-generated');
-		$subject = 'SDSS Status Updates Reminder';
+		//$headers = array('Auto-Submitted: auto-generated');
+		$subject = 'REMINDER SDSS Status Updates';
 
 		// send an email to each user with update statuses in it.
 		foreach ( $user_updates as $slug=>$this_user_update ) {
@@ -723,56 +779,56 @@
 			if ( false !== $thisuser = get_user_by( 'slug' , $slug ) ) {
 				
 				$body .= '<h2>SDSS Page Status Update for ' . $thisuser->display_name . '.</h2>';
-				/*/
-				if ( 'completed' == $this_status_key  && !empty( $this_user_update[ $this_status_key ] ) ){
-					$body .=  '<h3>' . $this->statuses[ $this_status_key ] . '</h3>' . PHP_EOL;
-					$body .=  '<p>You have ' . count( $this->statuses[ $this_status_key ] ) . ' pages that are ' . $this->statuses[ $this_status_key ] . '</p>' . PHP_EOL;
-				}
-				/*/
+				$body .= ( $this->preview_emails ) ? "Preview on. Sending all emails to " . $thisupdater->display_name . ".\n" : '' ; 
+
 				foreach( $this->statuses as $this_status_key => $this_status ) {
 					
-					// No blank notifications
+					// Skip 0's
 					if ( empty( $this_user_update[ $this_status_key ] ) ) continue;
+					
 					$body .=  '<h3>' . $this->statuses[ $this_status_key ] . '</h3>' . PHP_EOL;
-					$body .=  '<p>You are assigned to ' . count( $this->statuses[ $this_status_key ] ) . ' pages that are ' . $this->statuses[ $this_status_key ] . '</p>' . PHP_EOL;
-					switch ($this_status_key ) {
+					$body .=  '<p>You have ' . count( $this_user_update[ $this_status_key ] ) . ' pages with status "' . $this_status . '".</p>' . PHP_EOL;
+					
+					switch ( $this_status_key ) {
 						case 'completed' :
 							break;
 						case 'do-not-publish' :
-							$body .=  '<p>Please ensure that all these pages are not Published, and that there are no links to these pages from other published pages. These pages should be either Private or Drafts.</p>' . PHP_EOL;
+							$body .=  '<p>Please ensure that pages with status "Do Not Publish" have their status set to "Private", or "Draft", and are not linked from other published pages.</p>' . PHP_EOL;
 						default:
 							$body .=  "<ul>" . PHP_EOL;
 							foreach ( $this_user_update[ $this_status_key ] as $thispage ) {
 								$body .=  '<li><a href="' . get_the_permalink( $thispage ) . '">' . get_the_title( $thispage ) . '</a></li>' . PHP_EOL;
 							}
 							$body .=  "</ul>" . PHP_EOL;
+							break;
 					}
-					/*/					
-					$body .=  '<h3>Your Pages that are ' . $this_status . '</h3>' . PHP_EOL;
-					$body .=  "<ul>" . PHP_EOL;
-					foreach ( $this_user_update[ $this_status_key ] as $thispage ) {
-						$body .=  '<li><a href="' . get_the_permalink( $thispage ) . '">' . get_the_title( $thispage ) . '</a></li>' . PHP_EOL;
-					}
-					$body .=  "</ul>" . PHP_EOL;
-					/*/
 				}
-				//$success = wp_mail( $thisuser->user_email , $subject , $body, $headers);
-				//if ( wp_mail( 'bonbons0220@gmail.com' , $subject , $body, $headers) )
-				if ( wp_mail( $thisuser->user_email , $subject , $body, $headers) )
-					$sent++;
-				else 
-					$notsent++;
 				
-				//$all_bodies .= $body;
+				// If previewing, send to this default updater's email address
+				$to_email = ( $this->preview_emails ) ?  $thisupdater->user_email : $thisuser->user_email ;
+				
+				// Send the emails
+				if ( wp_mail( $to_email , $subject , $body ) ) $sent++;
+					else $notsent++;
+					
+				// Maybe add to string to echo
+				if ( $this->preview_emails ) {
+					$message .= "To: " . $thisuser->user_email . PHP_EOL;
+					$message .= "Subject: " . $subject . PHP_EOL;
+					$message .= "Body: " . $body . PHP_EOL;
+					$message .= "<hr>";
+				}
 			}
 		}
 
 		//Remove the override so that it doesn't interfere with other plugins that might
 		//want to send normal plaintext emails.
-		remove_filter('wp_mail_content_type', array($this, 'override_mail_content_type'));
+		remove_filter('wp_mail_content_type', array( $this, 'override_mail_content_type'));
 		
 		$result = ( $sent ) ? array_merge( $result , array( 'success'=>"Sent $sent Emails!" ) ) : $result ; 
 		$result = ( $notsent ) ? array_merge( $result , array( 'error'=>"Could not send $notsent emails." ) ) : $result ; 
+		
+		$result = array_merge( $result , array( 'info'=>$message ) ); 
 		
 		return $result;
 	}
@@ -781,10 +837,10 @@
 	// Import a CSV file with Page Status Updates
 	/* 
 	 * @since  1.1
-	 * @access public
+	 * @access private
 	 * @return void
 	 */	
-	function do_action_import() {
+	private function do_action_import() {
 
 		$status = "error";
 		
@@ -808,10 +864,10 @@
 		
 		// Validate input
 		if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
-			$error .= "Error. User not found: " . $this_csv[5] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
+			$error .= "Error. User not found: " . $this_csv[5] . ", User not found, skipping " . $this_csv[0] . "...<br>\n";
 			continue;
 		} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
-			$error .= "Error. Status not found: " . $this_csv[4] . ", Skipping ID " . $this_csv[0] . "...<br>\n";
+			$error .= "Error. Status not found: " . $this_csv[4] . ", Status not found, skipping " . $this_csv[0] . "...<br>\n";
 			continue;
 		}			
 			
@@ -854,10 +910,10 @@
 	// Write Status Updates CSV export file
 	/* 
 	 * @since  1.1
-	 * @access public
+	 * @access private
 	 * @return $result
 	 */	
-	function write_export_data(  ) {
+	private function write_export_data(  ) {
 
 		$output = '';
 		$sep = ',';
@@ -865,7 +921,7 @@
 		
 		$fname = sanitize_title( home_url( ) . '-export-' . date('Ymd-Hi') ) . '.csv';
 
-		$fpath = $this->default_tmppath . "/" . $fname;
+		$fpath = $this->tmppath . "/" . $fname;
 
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
 		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
@@ -985,8 +1041,8 @@
 	function render_update_meta_box( $page ) {
 		$values = get_post_custom( $page->ID );
 		
-		$updater = isset( $values['updatez_updater'] ) ? esc_attr( $values['updatez_updater'][0] ) : $this->default_updater ;
-		$status = isset( $values['updatez_status'] ) ? esc_attr( $values['updatez_status'][0] ) : $this->default_status ;
+		$updater = isset( $values['updatez_updater'] ) ? esc_attr( $values['updatez_updater'][0] ) : $this->updater ;
+		$status = isset( $values['updatez_status'] ) ? esc_attr( $values['updatez_status'][0] ) : $this->status ;
 		$comment = isset( $values['updatez_comment'] ) ? esc_attr( $values['updatez_comment'][0] ) : '' ;
 		wp_nonce_field( 'save_postmeta_action' , 'save_postmeta_nonce' );
 	?>
@@ -1032,14 +1088,15 @@
 	
 		if ( $column_name == 'update_updater' ) {
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
-			echo "<a href='" . add_query_arg( $this->updater , $the_user->ID ) . "'>";
+			echo "<a href='" . add_query_arg( $this->get_updater , $the_user->user_nicename ) . "'>";
 			echo $the_user->display_name . "<span class='lookup hidden'>$the_user->user_nicename</span>";
 			echo "</a>";
-			} 
+		} 
+		
 		if ( $column_name == 'update_status' ) {
 			$the_status = get_post_meta( $post_id , "updatez_status" , true) ;
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
-			echo "<a href='" . add_query_arg( $this->statuz , $the_status ) . "'>";
+			echo "<a href='" . add_query_arg( $this->get_statuz , $the_status ) . "'>";
 			echo $this->statuses[ $the_status ] . "<span class='lookup hidden'>$the_status</span>";
 			echo "</a>";
 			if ( in_array( $the_status , array( "completed" , "do-not-publish" ) ) == false ) {
@@ -1179,9 +1236,7 @@
 		}
 		if ( !current_user_can( 'edit_posts' , $post_id ) ) {
 			return;
-		}
-		
-		
+		}		
 		if ( isset( $_REQUEST['update_updater'] ) ) {
 			update_post_meta( $post_id, 'updatez_updater' , $_REQUEST['update_updater'] );
 		}
@@ -1196,106 +1251,107 @@
 	 */	
 	function posts_where( $where ) {
 		
-		$updater = $this->updater;
-		$statuz = $this->statuz;
+		$get_updater = $this->get_updater;
+		$get_statuz = $this->get_statuz;
+		
+		$where .= " and post_status != 'pending' ";
 		
 		if( is_admin() ) {
 			global $wpdb;
 			
-			if ( isset( $_GET[$updater] ) && 
-				!empty( $_GET[$updater] ) ) {
+			if ( isset( $_GET[$get_updater] ) && 
+				!empty( $_GET[$get_updater] ) ) {
 
-				if ( false !== $updater_info = get_userdata( intval( $_GET[$updater ] ) ) ) {
+				if ( false !== $updater_info = get_user_by( 'slug' , $_GET[ $get_updater ] ) ) {
 					$where .= " and ID in " .
-						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '" . $updater_info->user_nicename . "' and post_id in " .
-						"(select post_id from sdsswp_dr14_test.wp_postmeta where meta_key='updatez_updater' ) )";
+						"(select post_id from wp_postmeta WHERE meta_value = '" . $updater_info->user_nicename . "' and post_id in " .
+						"(select post_id from wp_postmeta where meta_key='updatez_updater' ) )";
 				}
 			}
 			
-			if ( isset( $_GET['statuz'] ) && 
-				!empty( $_GET['statuz'] ) ) {
+			if ( isset( $_GET[$get_statuz] ) && 
+				!empty( $_GET[$get_statuz] ) ) {
 				
-				$statuz = sanitize_title( $_GET['statuz'] );
+				$statuz = sanitize_title( $_GET[$get_statuz] );
 				$where .= " and ID in " .
-						"(select post_id from sdsswp_dr14_test.wp_postmeta WHERE meta_value = '$statuz' and post_id in " .
-						"(select post_id from sdsswp_dr14_test.wp_postmeta where meta_key='updatez_status' ) )";
+						"(select post_id from wp_postmeta WHERE meta_value = '$statuz' and post_id in " .
+						"(select post_id from wp_postmeta where meta_key='updatez_status' ) )";
 			}
 		}
 		return $where;
 	}	
 	
 	/**
-	/* Show Users dropdown for Filter OPtions on All Pages Admin Screen
+	/* Show Users dropdown for Filter Options on All Pages Admin Screen
 	/* 
 	 */	
 	function add_filter_options(  ) {
 
 		global $typenow;
-		$updater = $this->updater;
-		$statuz = $this->statuz;
-
-		if ($typenow=='page') {
-			
-			$selected_user = ( isset( $_GET[$updater] ) && 
-				!empty( $_GET[$updater] ) && 
-				intval( $_GET[$updater] ) > 0 ) ? 
-					intval( $_GET[$updater] ) :
-					0 ;
-					
-			$selected_status = ( isset( $_GET[$statuz] ) && 
-				!empty( $_GET[$statuz] ) &&
-				array_key_exists( $_GET[$statuz] , $this->statuses ) ) ? 
-					$_GET[$statuz] :
-					0 ;
 		
+		if ('page' !== $typenow ) return;
 			
-			// Add Updater (Users) Dropdown to Filter Options section
-			wp_dropdown_users( array(
-				'name'	=>  "updater" ,
-				'show_option_all'	=>  __("All Updaters") ,
-				'role__in'			=>  array( 'administrator' , 'editor' ) ,
-				'selected'			=>  $selected_user ,
-			));
+		$updater = $this->get_updater;
+		$statuz = $this->get_statuz;
 			
-			// Add Status Dropdown to Filter Options section
-			$this->wp_dropdown_status( array(
-				'selected'			=>  $selected_status ,
-			));
-		}
-	}	
+		$selected_user = ( isset( $_GET[ $updater ] ) && !empty( $_GET[ $updater ] ) && get_user_by( 'slug' , $_GET[$updater ] ) ) ? 
+			$_GET[ $updater ] : 
+			0 ;
+				
+		$selected_status = ( isset( $_GET[$statuz] ) && 
+			!empty( $_GET[$statuz] ) &&
+			array_key_exists( $_GET[$statuz] , $this->statuses ) ) ? 
+				$_GET[$statuz] :
+				0 ;
+	
+		
+		// Add Updater (Users) Dropdown to Filter Options section
+		$this->wp_dropdown_updaters( );
+		
+		// Add Status Dropdown to Filter Options section
+		$this->wp_dropdown_status( array(
+			'selected'			=>  $selected_status ,
+		));
+	}
 
 	/**
 	/* Get plugin options or use default options
 	/* 
 	 * @since  1.4
-	 * @access public
+	 * @access private
 	 * @return void
 	 */	
-	function get_options() {
+	private function get_options() {
+		
+		$this->preview_emails = get_option( 'updatez_preview_emails' , $this->default_preview_emails );
 		$this->frontend = get_option( 'updatez_frontend' , $this->default_frontend );
-		$this->default_tmppath = get_option( 'updatez_default_tmppath' , $this->default_tmppath );
-		$this->default_updater = get_option( 'updatez_default_updater' , $this->default_updater );
-		$this->default_status = get_option( 'updatez_default_status' , $this->default_status );
+		$this->tmppath = get_option( 'updatez_tmppath' , $this->default_tmppath );
+		$this->updater = get_option( 'updatez_updater' , $this->default_updater );
+		$this->status = get_option( 'updatez_status' , $this->default_status );
 	}
 
 	/**
 	/* Get Users' Pages and their Update Status for Notification Emails 
 	 * @since  1.4
-	 * @access public
+	 * @access private
 	 * @return $user_updates
 	 */	
-	function get_user_updates(  ) {
+	private function get_user_updates(  ) {
 		
 		$user_updates = array();
 		$this_user = array();
-		foreach ( $this->statuses as $userkey=>$uservalue ) {
-			$this_user[ $userkey ] = array();
+		foreach ( $this->statuses as $statuskey=>$statusvalue ) {
+			$this_user_status[ $statuskey ] = array();
 		}
 		
 		foreach ( $this->all_pages as $this_page ) {
+			
+			// initialize if new
 			if ( !array_key_exists( $this_page->updatez_updater , $user_updates ) ) {
-				$user_updates[ $this_page->updatez_updater ] = $this_user;
+				$user_updates[ $this_page->updatez_updater ] = $this_user_status;
 			}
+			
+			// increment
 			if ( !empty( $this_page->updatez_status ) ) {
 				$user_updates[ $this_page->updatez_updater ][ $this_page->updatez_status ][] = $this_page->ID;
 			}
@@ -1306,13 +1362,17 @@
 
 	/**
 	/* Get summary of Status Updates for Overview page 
-	/* 
+	 /* 
+	 * @since  1.4
+	 * @access private
+	 * @return string
 	 */	
-	function get_summary(  ) {
+	private function get_summary(  ) {
 		$page_summary = array( );
-		foreach ( $this->post_status as $ps ) {
-			foreach ( $this->statuses as $uskey=>$usvalue ) {
-				$page_summary[ $ps ][ $uskey ] = 0;
+		
+		foreach ( $this->statuses as $uskey=>$usvalue ) {
+			foreach ( $this->post_status as $ps ) {
+				$page_summary[ $ps	 ][ $uskey ] = 0;
 			}
 		}
 		
@@ -1324,6 +1384,7 @@
 		
 		//loop through all the pages
 		foreach ( $this->all_pages as $this_page ) {
+			
 			// if this page's post_status is not one we are tracking, continue to the next.
 			if ( !in_array( $this_page->post_status , $this->post_status ) ) continue;
 			
@@ -1344,10 +1405,13 @@
 		return $summary;
 	}
 		
-	/**
-	/* Enqueue JavaScript for 
-	/* 
-	 */	
+	/*/
+	// Enqueue JavaScript for All Pages Screen
+	//
+	// @since  1.4
+	// @access public
+	// @return none 
+	/*/	
 	function idies_admin_enqueue_scripts( $hook ) {
 
 		if ( 'edit.php' === $hook &&
@@ -1357,7 +1421,36 @@
 		}
 	}
 	
-	function wp_dropdown_status( $args = '' ) {
+	/*/
+	// Show Dropdown Update Status Select
+	//
+	// @since  1.4
+	// @access private
+	// @return string 
+	/*/	
+	private function wp_dropdown_updaters( $class='' , $echo=true ) {
+		
+		$result = '' ;
+		$result .= '<select name="updater" class="' . $class . '" id="updater">';
+		$result .= '<option value="' . 0 . '">All Updaters</option>';
+		foreach ( $this->all_users as $thisuser ) {
+			$result .= '<option value="' . $thisuser->user_nicename . '">' . $thisuser->display_name . '</option>';
+		}
+		$result .= '</select>';
+		
+		if ( !$echo ) return $result;
+		
+		echo $result;
+	} 
+
+	/*/	
+	// Show Dropdown Update Status Select
+	//
+	// @since  1.4
+	// @access private
+	// @return string 
+	/*/	
+	private function wp_dropdown_status( $args = '' ) {
 		
 		// Defaults: Add "All Statuses" option; echo output; "All Statuses" selected by default; name of <select> = 'statuz'; no default class for <select>
 		$defaults = array(
