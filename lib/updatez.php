@@ -1389,8 +1389,8 @@
 			if ( !in_array( $this_page->post_status , $this->post_status ) ) continue;
 			
 			// if page update status or user not set, set to initial value
-			if ( empty( $this_page->updatez_status ) ) $this_page->updatez_status = $this->status;
-			if ( empty( $this_page->updatez_updater ) ) $this_page->updatez_updater = $this->updater;
+			if ( empty( $this_page->updatez_status ) || ( !in_array( $this_page->update_status , $this->statuses ) ) ) $this_page->updatez_status = $this->status;
+			if ( empty( $this_page->updatez_updater ) || ( false === get_user_by( 'slug' , $this_page->updatez_updater ) ) ) $this_page->updatez_updater = $this->updater;
 			
 			//pages
 			$page_summary[ $this_page->post_status ][ $this_page->updatez_status ]++;
