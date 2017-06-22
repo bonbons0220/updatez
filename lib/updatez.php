@@ -346,7 +346,7 @@
 		$this_page = 'overview';
 		
 		// Go through pages and get summary of update statuses.
-		$summary = $this->get_summary();
+		$summary = $this->get_summary( $messages );
 		
 		// Get and Do the Action, if there is one
 		$messages = $this->do_action( $this_page );
@@ -1367,39 +1367,38 @@
 	 * @access private
 	 * @return string
 	 */	
-	private function get_summary(  ) {
-		$page_summary = array( );
+	private function get_summary( &$messages = array() ) {
 		
-		foreach ( $this->statuses as $update_status=>$usvalue ) {
-			foreach ( $this->post_status as $post_status ) {
-				$page_summary[ $post_status	 ][ $update_status ] = 0;
-			}
+		$this_summary = array();
+		foreach ( $this->statuses as $key=>$value ) {
+			$this_summary[ $key ] = 0;
 		}
 		
+		$page_summary = array();
 		$user_summary = array();
-		$this_user_summary = array();
-		foreach ( $this->statuses as $update_status=>$usvalue ) {
-			$this_user_summary[ $update_status ] = 0;
-		}
 		
 		//loop through all the pages
 		foreach ( $this->all_pages as $this_page ) {
 			
-			// if this page's post_status is not one we are tracking, continue to the next.
+			// if not tracking this post_status, continue. Eg 'revision'
 			if ( !in_array( $this_page->post_status , $this->post_status ) ) continue;
 			
-			// if page update status or user not set, set to initial value
-			if ( empty( $this_page->updatez_status ) || ( !in_array( $this_page->update_status , $this->statuses ) ) ) $this_page->updatez_status = $this->status;
-			if ( empty( $this_page->updatez_updater ) || ( false === get_user_by( 'slug' , $this_page->updatez_updater ) ) ) $this_page->updatez_updater = $this->updater;
-			
+			$pstat = $this_page->post_status;
+			$ustat = ( !empty( $this_page->updatez_status ) && ( array_key_exists( $this_page->updatez_status , $this->statuses ) ) ) ? $this_page->updatez_status : $this->status ; 
+			$pupdater = ( empty( $this_page->updatez_updater ) || ( false === get_user_by( 'slug' , $this_page->updatez_updater ) ) ) ? $this->updater : $this_page->updatez_updater ;
+
 			//pages
-			$page_summary[ $this_page->post_status ][ $this_page->updatez_status ]++;
+			if ( empty( $page_summary[ $pstat ] ) ) 
+				$page_summary[ $pstat ] = $this_summary;
+			else
+				$page_summary[ $pstat ][ $ustat ]++;
 			
 			//users
-			if ( !array_key_exists( $this_page->updatez_updater , $user_summary ) ) {
-				$user_summary[ $this_page->updatez_updater ] = $this_user_summary;
-			}
-			$user_summary[ $this_page->updatez_updater ][ $this_page->updatez_status ]++;
+			if ( empty( $user_summary[ $pupdater ] ) )
+				$user_summary[ $pupdater ] = $this_summary;
+			else
+				$user_summary[ $pupdater ][ $ustat ]++;
+
 		}
 		
 		$summary = array( 
