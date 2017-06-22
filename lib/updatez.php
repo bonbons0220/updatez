@@ -153,6 +153,20 @@
 	public $actions;
 	
 	/**
+	 * Default for whether to show update status on All Pages Screen
+	 *
+	 * @var    boolean
+	 */	 
+	public $default_pages_screen;
+	
+	/**
+	 * Flag for whether to show update status on All Pages Screen
+	 *
+	 * @var    boolean
+	 */	 
+	public $pages_screen;
+	
+	/**
 	 * Default for whether to Preview or Send Emails
 	 *
 	 * @var    boolean
@@ -197,21 +211,21 @@
 		add_action( 'admin_menu' , array( $this , 'get_pages' ) );
 		
 		// ADMIN CONTENT EDITOR
-		add_action( 'add_meta_boxes_page' , array( $this , 'updatez_meta_box_page' ) );		
-		add_action( 'save_post' , array( $this , 'updatez_save_meta' ) );
+		add_action( 'add_meta_boxes_page' , array( $this , 'meta_box_page' ) );		
+		add_action( 'save_post' , array( $this , 'save_meta' ) );
 		
 		// ALL PAGES SCREEN
-		add_action( 'admin_enqueue_scripts' , array(  $this , 'idies_admin_enqueue_scripts' ) );
+		add_action( 'admin_enqueue_scripts' , array(  $this , 'admin_enqueue_scripts' ) );
 		
 		//                  CUSTOM COLUMNS
-		add_action( 'manage_pages_custom_column' , array( $this , 'idies_page_column_content' ) , 10 , 2 );
-		add_filter( 'manage_pages_columns' , array( $this , 'idies_custom_pages_columns' ) );
-		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'idies_sortable_pages_column' ) );
-		add_action( 'pre_get_posts' ,array(  $this , 'idies_custom_columns_column_orderby' ) );
+		add_action( 'manage_pages_custom_column' , array( $this , 'page_column_content' ) , 10 , 2 );
+		add_filter( 'manage_pages_columns' , array( $this , 'custom_pages_columns' ) );
+		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'sortable_pages_column' ) );
+		add_action( 'pre_get_posts' ,array(  $this , 'custom_columns_column_orderby' ) );
 		
 		//                  QUICK EDIT
-		add_action( 'quick_edit_custom_box' , array( $this , 'idies_display_quickedit_custom') , 10, 2 );
-		add_action( 'save_post' , array(  $this , 'idies_save_quickedit_custom' ) );
+		add_action( 'quick_edit_custom_box' , array( $this , 'display_quickedit_custom') , 10, 2 );
+		add_action( 'save_post' , array(  $this , 'save_quickedit_custom' ) );
 		
 		//                  FILTERING OPTIONS
 		add_filter( 'posts_where' , array( $this , 'posts_where' ) );
@@ -222,11 +236,14 @@
 		/********************************************************************************/
 		
 		// DEFAULTS
+		$this->default_pages_screen=true;
 		$this->default_preview_emails=true;
 		$this->default_frontend = true;
 		$this->default_updater = false;
 		$this->default_status = 'not-started';
 		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		
+		$this->get_options();
 		
 		$this->meta_fields = array( 
 			'updatez_status',
@@ -481,6 +498,13 @@
 		$result .= '</tr>';
 
 		$result .= '<tr>';
+		$result .= '<th scope="row">Show Update Status on All Pages Screen</th>';
+		$result .= '<td>';
+		$result .= '<input type="checkbox" name="pages_screen" value="true" id="pages_screen" ' . checked( $this->pages_screen , true , false ) . ' >';
+		$result .= '</td>';
+		$result .= '</tr>';
+
+		$result .= '<tr>';
 		$result .= '<th scope="row">Default Path (Writable dir for temp files)</th>';
 		$result .= '<td>';
 		$result .= '<input type="text" name="tmppath" id="tmppath" value="' . $this->tmppath . '" >';
@@ -713,6 +737,7 @@
 		$checks = array( 
 			'frontend' ,
 			'preview_emails' ,
+			'pages_screen' ,
 		);
 		foreach( $checks as $this_option ) {
 			$this->$this_option = ( isset( $_POST[ $this_option ] ) ) ? true : false ; 
@@ -965,7 +990,7 @@
 	 * @access public
 	 * @return void
 	 */	
-	function updatez_save_meta($post_id){	
+	function save_meta($post_id){	
 		
 		// Check nonce, user capabilities
 		if ( ! isset($_POST['save_postmeta_nonce']) ) return; //in case this is a different save_post action
@@ -1020,7 +1045,7 @@
 	 * @access public
 	 * @return void
 	 */	
-	function updatez_meta_box_page( $page ){
+	function meta_box_page( $page ){
 		add_meta_box( 
 			'idies-update-meta-box-page' , 
 			__( 'Status Update' ), 
@@ -1084,8 +1109,10 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_page_column_content( $column_name, $post_id ) {
-	
+	function page_column_content( $column_name, $post_id ) {
+		
+		//if ( !$this->pages_screen ) return;
+		
 		if ( $column_name == 'update_updater' ) {
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
 			echo "<a href='" . add_query_arg( $this->get_updater , $the_user->user_nicename ) . "'>";
@@ -1118,7 +1145,9 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_custom_pages_columns( $columns ) {
+	function custom_pages_columns( $columns ) {
+
+		if ( !$this->pages_screen ) return $columns;
 
 		/** Add a Thumbnail Column **/
 		$myCustomColumns = array(
@@ -1143,8 +1172,10 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_sortable_pages_column( $columns ) {
+	function sortable_pages_column( $columns ) {
 	
+		if ( !$this->pages_screen ) return $columns;
+
 		$columns['update_updater'] = 'updater';
 		$columns['update_status'] = 'update_status';
 	 
@@ -1161,8 +1192,10 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_custom_columns_column_orderby( $query ) {
+	function custom_columns_column_orderby( $query ) {
 	 
+		//if ( !$this->pages_screen ) return;
+
 		$orderby = $query->get( 'orderby');
 	 
 		if( 'updater' == $orderby ) {
@@ -1183,7 +1216,10 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_display_quickedit_custom( $column_name, $post_type ) {
+	function display_quickedit_custom( $column_name, $post_type ) {
+		
+		if ( !$this->pages_screen ) return;
+		
 		// Only print the nonce once.
 		static $printNonce = TRUE;
 		if ( $printNonce ) {
@@ -1226,7 +1262,9 @@
 	 * @access public
 	 * @return void
 	 */	
-	function idies_save_quickedit_custom( $post_id ) {
+	function save_quickedit_custom( $post_id ) {
+
+		//if ( !$this->pages_screen ) return;
 
 		if ( ! isset($_POST['save_quickedit_nonce']) ) return; //in case this is a different save_post action
 		check_admin_referer( 'save_quickedit_action' , 'save_quickedit_nonce' );
@@ -1251,6 +1289,8 @@
 	 */	
 	function posts_where( $where ) {
 		
+		if ( !$this->pages_screen ) return $where;
+
 		$get_updater = $this->get_updater;
 		$get_statuz = $this->get_statuz;
 		
@@ -1290,6 +1330,7 @@
 		global $typenow;
 		
 		if ('page' !== $typenow ) return;
+		if ( !$this->pages_screen ) return;
 			
 		$updater = $this->get_updater;
 		$statuz = $this->get_statuz;
@@ -1323,6 +1364,7 @@
 	 */	
 	private function get_options() {
 		
+		$this->pages_screen = get_option( 'updatez_pages_screen' , $this->default_pages_screen );
 		$this->preview_emails = get_option( 'updatez_preview_emails' , $this->default_preview_emails );
 		$this->frontend = get_option( 'updatez_frontend' , $this->default_frontend );
 		$this->tmppath = get_option( 'updatez_tmppath' , $this->default_tmppath );
@@ -1415,11 +1457,14 @@
 	// @access public
 	// @return none 
 	/*/	
-	function idies_admin_enqueue_scripts( $hook ) {
+	function admin_enqueue_scripts( $hook ) {
 
+		// All Pages Screen
 		if ( 'edit.php' === $hook &&
+			$this->pages_screen &&
 			isset( $_GET['post_type'] ) && $this->post_type === $_GET['post_type'] ) {
-				wp_enqueue_script( 'idies_admin_script' , ICT_DIR_URL . 'js/admin_edit.js' ,
+								
+				wp_enqueue_script( 'updatez_admin_script' , ICT_DIR_URL . 'js/admin_edit.js' ,
 					false, null, true );
 		}
 	}
