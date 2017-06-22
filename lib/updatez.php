@@ -1,4 +1,4 @@
-3<?php 
+<?php 
 /**
  * Updatez WordPress plug-in tracks update status of pages.
  *
