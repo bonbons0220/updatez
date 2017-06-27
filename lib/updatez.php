@@ -253,6 +253,7 @@
 		$this->post_type = 'page';
 		$this->post_status  = array( 
 			'publish',
+			'pending',
 			'private',
 			'trash',
 			'draft') ;
@@ -261,6 +262,7 @@
 			"not-started"=>"Not Started",
 			"in-progress"=>"In Progress",
 			"needs-review"=>"Needs Review",
+			"needs-migration"=>"Needs Migration",
 			"completed"=>"Completed",
 			"do-not-publish"=>"Do Not Publish",
 		);
@@ -268,6 +270,7 @@
 			'not-started' => 'panel-danger' ,
 			'in-progress' => 'panel-warning' ,
 			'needs-review' => 'panel-info' ,
+			'needs-migration' => 'panel-primary' ,
 			'completed' => 'panel-success' ,
 			'do-not-publish' => 'panel-default' ,
 		);
@@ -1149,7 +1152,6 @@
 
 		if ( !$this->pages_screen ) return $columns;
 
-		/** Add a Thumbnail Column **/
 		$myCustomColumns = array(
 			'update_updater' => __( 'Updater' ),
 			'update_status' => __( 'Update Status' )
@@ -1416,8 +1418,11 @@
 			$this_summary[ $key ] = 0;
 		}
 		
-		$page_summary = array();
 		$user_summary = array();
+		
+		// Make sure all possible statuses are in page_summary.
+		$page_summary = array();
+		foreach ( $this->post_status as $pstat )  $page_summary[ $pstat ] = $this_summary;
 		
 		//loop through all the pages
 		foreach ( $this->all_pages as $this_page ) {
@@ -1430,11 +1435,12 @@
 			$pupdater = ( empty( $this_page->updatez_updater ) || ( false === get_user_by( 'slug' , $this_page->updatez_updater ) ) ) ? $this->updater : $this_page->updatez_updater ;
 
 			//pages
-			if ( empty( $page_summary[ $pstat ] ) ) 
+			if ( empty( $page_summary[ $pstat ] ) ) {
 				$page_summary[ $pstat ] = $this_summary;
-			else
+				$this->post_status[] = $pstat;
+			} else {
 				$page_summary[ $pstat ][ $ustat ]++;
-			
+			}
 			//users
 			if ( empty( $user_summary[ $pupdater ] ) )
 				$user_summary[ $pupdater ] = $this_summary;
