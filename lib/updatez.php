@@ -104,7 +104,7 @@
 	public $post_status;
 	
 	/**
-	 * Which post type to show update status on.
+	 * Which post type(s) to show update status on.
 	 *
 	 * @var    string
 	 */
@@ -218,7 +218,7 @@
 		add_action( 'admin_enqueue_scripts' , array(  $this , 'admin_enqueue_scripts' ) );
 		
 		//                  CUSTOM COLUMNS
-		add_action( 'manage_pages_custom_column' , array( $this , 'page_column_content' ) , 10 , 2 );
+		add_action( 'manage_pages_custom_column' , array( $this , 'page_column_content' ) , 20 , 2 );
 		add_filter( 'manage_pages_columns' , array( $this , 'custom_pages_columns' ) );
 		add_filter( 'manage_edit-page_sortable_columns' , array( $this , 'sortable_pages_column' ) );
 		add_action( 'pre_get_posts' ,array(  $this , 'custom_columns_column_orderby' ) );
@@ -229,7 +229,7 @@
 		
 		//                  FILTERING OPTIONS
 		add_filter( 'posts_where' , array( $this , 'posts_where' ) );
-		add_action( 'restrict_manage_posts' , array( $this , 'add_filter_options' ) );
+		add_action( 'restrict_manage_posts' , array( $this , 'add_filter_options' ) , 20 , 2 );
 
 		/********************************************************************************/
 		/*********** VARIABLES **********************************************************/
@@ -290,7 +290,7 @@
 		);
 		
 		// IMPORT EXPORT
-		$this->tmpurl = '/wp-tmp';							// TEMP FILE LOCATION
+		$this->tmpurl = site_url('wp-tmp');							// TEMP FILE LOCATION
 		$this->csv_fields = array("ID", 
 			"Title",
 			"Edit",
@@ -396,9 +396,9 @@
 			foreach( $this->statuses as $this_update_key=>$this_update_status ) {
 				$result .= 
 					'<td>' . 
-					'<a href="/wp-admin/edit.php?post_type=page' .
+					'<a href="' . site_url( 'wp-admin/edit.php?post_type=page' .
 						'&statuz=' . $this_update_key . 
-						'&post_status=' . $this_page_status . '">' . 
+						'&post_status=' . $this_page_status ) . '">' . 
 					$summary['pages'][ $this_page_status ][ $this_update_key ] . 
 					'</a>';
 					'</td>';
@@ -426,9 +426,9 @@
 				$result .= '<th scope="row">' . $this_user->display_name . '</th>';
 				foreach( $this->statuses as $this_update_status ) {
 					$result .= '<td>' . 
-					'<a href="/wp-admin/edit.php?post_type=page&all_posts=1' .
+					'<a href="' . site_url( 'wp-admin/edit.php?post_type=page&all_posts=1' .
 						'&updater=' . $this_user->user_nicename .
-						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) . '">' . 
+						'&statuz=' . array_shift( array_keys( $this->statuses , $this_update_status ) ) ) . '">' . 
 					$summary['users'][ $this_user->user_nicename ][ array_shift( array_keys( $this->statuses , $this_update_status ) ) ] . 
 					'</a>';
 					'</td>';
@@ -615,7 +615,7 @@
 			 'column titles and order must match CSV Export file). ' .
 			 'Also, the <strong>Updater</strong> must be a WordPress login for a valid user ' .
 			 '(e.g. bsouter), not a display name (e.g. Bonnie Souter). You can find users\' login ' . 
-			 'names on <a href="/wp-admin/users.php">All Users</a>.</em></td>';
+			 'names on <a href="' . site_url( 'wp-admin/users.php') . '">All Users</a>.</em></td>';
 		$result .= '</tr>';
 				
 		$result .= '</tbody>';
@@ -1113,8 +1113,6 @@
 	 * @return void
 	 */	
 	function page_column_content( $column_name, $post_id ) {
-		
-		//if ( !$this->pages_screen ) return;
 		
 		if ( $column_name == 'update_updater' ) {
 			$the_user = get_user_by(  'slug' , get_post_meta( $post_id , "updatez_updater" , true) );
