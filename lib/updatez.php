@@ -241,7 +241,7 @@
 		$this->default_frontend = true;
 		$this->default_updater = false;
 		$this->default_status = 'not-started';
-		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/tmp/';
+		$this->default_tmppath = '/data1/dswww-ln01/sdss.org/updates';
 		
 		$this->get_options();
 		
@@ -254,7 +254,7 @@
 		$this->post_status  = array( 
 			'publish',
 			'private',
-			'trash',
+			//'trash',
 			'draft') ;
 			
 		$this->statuses = array(
