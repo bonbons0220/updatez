@@ -1568,12 +1568,15 @@
 		$class='panel-danger';
 
 		$update .= '<div class="clearfix"></div>';
+		$update .= '<p>&nbsp;</p>';
+		
+		$update .= '<div class="updatez">';
 		$update .= '<div class="panel ' . $this->panel_class[$status] . '">';
 		$update .= '<div class="panel-heading"><h3 class="panel-title">' . $this->statuses[$status] . '</h3></div>';
 		$update .= '<div class="panel-body">';
 		$update .= "Updater: " . $updater . "<br>\n";
 		$update .= "Comments: " . $comments;
-		$update .= '</div></div>';
+		$update .= '</div></div></div>';
 		
 		return $content  . $update;
 	}
