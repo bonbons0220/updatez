@@ -888,19 +888,20 @@
 		//loop through the csv and update all the files
 		$error = '' ; 
 		foreach( $contents as $this_line ) {
-		$this_csv = str_getcsv( $this_line ) ;
-		
-		// Validate input
-		if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
-			$error .= "Error. User not found: " . $this_csv[5] . ", User not found, skipping " . $this_csv[0] . "...<br>\n";
-			continue;
-		} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
-			$error .= "Error. Status not found: " . $this_csv[4] . ", Status not found, skipping " . $this_csv[0] . "...<br>\n";
-			continue;
-		}			
+			$this_csv = str_getcsv( $this_line ) ;
 			
+			// Validate input
+			if ( get_user_by( 'slug' , $this_csv[5] ) === false ) {
+				$error .= "Error. User not found: " . $this_csv[5] . ", User not found, skipping " . $this_csv[0] . "...<br>\n";
+				continue;
+			//} else if ( ( $this_key = array_search( $this_csv[4], $this->statuses ) ) === false ) {
+			} else if ( array_key_exists ( $this_csv[4] , $this->statuses ) === false ) {
+				$error .= "Error. Status not found: " . $this_csv[4] . ", Status not found, skipping " . $this_csv[0] . "...<br>\n";
+				continue;
+			}			
+				
 			update_post_meta( $this_csv[0]  , 'updatez_updater' , $this_csv[5] ) ;
-			update_post_meta( $this_csv[0]  , 'updatez_status' , $this_key ) ;
+			update_post_meta( $this_csv[0]  , 'updatez_status' , $this_csv[4] ) ;
 			update_post_meta( $this_csv[0]  , 'updatez_comment' , $this_csv[6] ) ;
 		}
 
@@ -953,17 +954,23 @@
 
 		//ID, post_title, post.php?post=ID&action=edit, /post_name/, updatez_status, updatez_updater, updatez_comment, post_modified
 		$output .= $quo . implode( $quo . $sep . $quo , $this->csv_fields ). $quo . "\n"; 
-			
+
 		foreach ( $this->all_pages as $thispage ){
+		
+			$this_status = ( ! get_post_meta( $thispage->ID , 'updatez_status', true ) ) ? $this->default_status : get_post_meta( $thispage->ID , 'updatez_status', true ) ; 		
+		
 			$output .= 
 				$thispage->ID . $sep . 
 				$quo . $thispage->post_title . $quo . $sep . 
 				$quo . site_url( "wp-admin/post.php?post=" . $thispage->ID . "&action=edit" ) . $quo . $sep . 
 				$quo . get_the_permalink( $thispage->ID ) . $quo . $sep .  
-				$quo . $this->statuses[ get_post_meta( $thispage->ID, "updatez_status" , true )] . $quo . $sep . 
+				$quo . $this_status . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "updatez_updater" , true ) . $quo . $sep . 
 				$quo . get_post_meta( $thispage->ID, "updatez_comment" , true ) . $quo . $sep . 
 				$quo . $thispage->post_modified . $quo . "\n";
+				
+				//$quo . $this->statuses[ get_post_meta( $thispage->ID, "updatez_status" , true )] . $quo . $sep . 
+		
 		}
 		
 		//write temp file
