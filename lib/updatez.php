@@ -1550,7 +1550,7 @@
 		// Get Options
 		$this->get_options();
 
-		// Status is only shown on dev devng test and testng.
+		// Status is only shown on development servers
 		$update = '';
 		if ( ( 'development' !== WP_ENV ) || ( !( $this->frontend ) ) ) return $content;
 		
